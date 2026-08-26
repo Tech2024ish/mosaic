@@ -1,0 +1,4 @@
+product_code,sale_date,quantity,unit_price,warehouse_code
+SKU-1001,2026-01-02,12,149.95,JHB-01
+SKU-1002,2026-01-02,4,89.50,CPT-01
+SKU-1003,2026-01-03,7,210.00,JHB-01

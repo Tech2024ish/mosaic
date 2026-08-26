@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://mosaic:mosaic@localhost:5432/mosaic"
     secret_key: str = "development-only-change-me"
     access_token_expire_minutes: int = 30
+    storage_root: str = ".mosaic-storage"
+    max_upload_size_bytes: int = 25_000_000
     backend_cors_origins: list[str] = ["http://localhost:5173"]
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
