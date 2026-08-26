@@ -15,6 +15,5 @@ def row_fingerprint(sale: NormalizedSale) -> str:
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
-
 def file_fingerprint(content_sha256: str, dataset_type: str, organization_id: str) -> str:
     return hashlib.sha256(f"{organization_id}|{dataset_type}|{content_sha256}".encode()).hexdigest()

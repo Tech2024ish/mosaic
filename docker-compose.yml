@@ -2,15 +2,15 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-mosaic}
-      POSTGRES_USER: ${POSTGRES_USER:-mosaic}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mosaic}
+      POSTGRES_DB: ${DB_NAME:-mosaic}
+      POSTGRES_USER: ${DB_USER:-mosaic}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mosaic}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mosaic} -d ${POSTGRES_DB:-mosaic}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-mosaic} -d ${DB_NAME:-mosaic}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -19,9 +19,13 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-mosaic}:${POSTGRES_PASSWORD:-mosaic}@db:5432/${POSTGRES_DB:-mosaic}
+      DB_USER: ${DB_USER:-mosaic}
+      DB_PASSWORD: ${DB_PASSWORD:-mosaic}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-mosaic}
       BACKEND_CORS_ORIGINS: http://localhost:5173
-      SECRET_KEY: ${SECRET_KEY:-development-only-change-me}
+      SECRET_KEY: ${SECRET_KEY:-development-only-change-me-use-a-longer-local-secret-key}
     ports:
       - "8000:8000"
     depends_on:

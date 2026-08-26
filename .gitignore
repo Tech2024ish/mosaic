@@ -2,6 +2,7 @@
 .venv/
 __pycache__/
 *.py[cod]
+*.db
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -12,5 +13,6 @@ build/
 *.egg-info/
 node_modules/
 frontend/dist/
+.mosaic-storage/
 *.tsbuildinfo
 .DS_Store

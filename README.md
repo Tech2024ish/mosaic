@@ -27,6 +27,14 @@ alembic -c backend/alembic.ini upgrade head
 uvicorn app.main:app --app-dir backend --reload
 ```
 
+If the configured local PostgreSQL database does not exist yet, provision it using the credentials in `.env`:
+
+```powershell
+python -m scripts.provision_database
+```
+
+Run that command from `backend/` while the virtual environment is active, then apply migrations.
+
 In another terminal:
 
 ```powershell
@@ -61,6 +69,20 @@ alembic -c backend/alembic.ini upgrade head
 ## Scope boundary
 
 The foundation does not include forecasting, machine learning, optimization, scenario simulation, recommendations, ERP capabilities, or a complete authentication product. Those will be added incrementally, beginning with the data-ingestion pipeline.
+
+## Authentication
+
+Register an account, log in, and use the returned bearer token for protected endpoints:
+
+```powershell
+$account = @{ email = "analyst@example.com"; name = "Amina Ndlovu"; password = "Secure password 123!" } | ConvertTo-Json
+$registered = Invoke-RestMethod http://localhost:8000/api/v1/auth/register -Method Post -ContentType "application/json" -Body $account
+$login = Invoke-RestMethod http://localhost:8000/api/v1/auth/login -Method Post -ContentType "application/json" -Body $account
+$headers = @{ Authorization = "Bearer $($login.access_token)" }
+Invoke-RestMethod http://localhost:8000/api/v1/auth/me -Headers $headers
+```
+
+Equivalent endpoints are `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, and authenticated `GET /api/v1/auth/me`. Registration creates a new organization; organization IDs are never accepted from clients.
 
 ## Phase 2 data ingestion
 

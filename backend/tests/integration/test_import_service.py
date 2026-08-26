@@ -26,10 +26,16 @@ def test_import_persists_valid_rows_and_isolates_tenant() -> None:
     db.add_all([org_a, org_b])
     db.flush()
     user_a = User(
-        organization_id=org_a.id, email="a@example.com", password_hash=hash_password("password")
+        organization_id=org_a.id,
+        email="a@example.com",
+        name="A User",
+        password_hash=hash_password("password"),
     )
     user_b = User(
-        organization_id=org_b.id, email="b@example.com", password_hash=hash_password("password")
+        organization_id=org_b.id,
+        email="b@example.com",
+        name="B User",
+        password_hash=hash_password("password"),
     )
     db.add_all([user_a, user_b])
     db.commit()

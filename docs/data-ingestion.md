@@ -22,6 +22,8 @@ Use `GET /api/v1/imports/{import_id}` for status and summary, and `GET /api/v1/i
 
 The organization is derived from the authenticated user record, never from a request organization ID. Jobs, staging rows, and sales rows all store organization ownership. Reads apply organization predicates; foreign keys provide referential integrity. The current authentication foundation uses signed HS256 bearer tokens, with login/token issuance intentionally deferred to the authentication milestone.
 
+Authentication is now available through `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, and `GET /api/v1/auth/me`. Send the login response as `Authorization: Bearer <access_token>` when calling the import endpoints. Registration creates and associates a new organization server-side; clients cannot select a tenant.
+
 Uploads are limited by `MAX_UPLOAD_SIZE_BYTES` (25 MB by default), streamed in 1 MB chunks, stored under generated UUID keys, and never opened using the client filename. CSV content is decoded as UTF-8 and parsed structurally; invalid headers and malformed records are reported. Stored files are local-development infrastructure behind `LocalFileStorage`, ready for an object-storage adapter later.
 
 ## Idempotency and duplicates
