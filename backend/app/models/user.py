@@ -17,3 +17,4 @@ class User(TimestampedModel):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     organization = relationship("Organization", back_populates="users")
+    sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")

@@ -72,7 +72,7 @@ The foundation does not include forecasting, machine learning, optimization, sce
 
 ## Authentication
 
-Register an account, log in, and use the returned bearer token for protected endpoints:
+Register an account, log in, and use the returned bearer token for protected endpoints. Login creates a revocable database-backed session:
 
 ```powershell
 $account = @{ email = "analyst@example.com"; name = "Amina Ndlovu"; password = "Secure password 123!" } | ConvertTo-Json
@@ -80,10 +80,11 @@ $registered = Invoke-RestMethod http://localhost:8000/api/v1/auth/register -Meth
 $login = Invoke-RestMethod http://localhost:8000/api/v1/auth/login -Method Post -ContentType "application/json" -Body $account
 $headers = @{ Authorization = "Bearer $($login.access_token)" }
 Invoke-RestMethod http://localhost:8000/api/v1/auth/me -Headers $headers
+Invoke-RestMethod http://localhost:8000/api/v1/auth/logout -Method Post -Headers $headers
 ```
 
-Equivalent endpoints are `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, and authenticated `GET /api/v1/auth/me`. Registration creates a new organization; organization IDs are never accepted from clients.
+The authentication endpoints are `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, authenticated `GET /api/v1/auth/me`, and authenticated `POST /api/v1/auth/logout`. Registration creates a new organization; organization IDs are never accepted from clients. Logout revokes only the current user's session.
 
 ## Phase 2 data ingestion
 
-The first ingestion workflow supports tenant-aware sales-history CSV imports. See [docs/data-ingestion.md](docs/data-ingestion.md) and [examples/sales_history.csv](examples/sales_history.csv) for the format, lifecycle, validation, and idempotency rules. Authenticated requests use a signed bearer token; token issuance is intentionally deferred until the authentication milestone.
+The first ingestion workflow supports tenant-aware sales-history CSV imports. See [docs/data-ingestion.md](docs/data-ingestion.md) and [examples/sales_history.csv](examples/sales_history.csv) for the format, lifecycle, validation, and idempotency rules. Authenticated requests use a signed bearer token tied to an active database session.

@@ -26,4 +26,14 @@ PostgreSQL is the system of record. SQLAlchemy models use UUID identifiers, time
 
 ## Security and operations
 
-Configuration comes from environment variables. Password hashing is available through `pwdlib` for the future authentication flow. CORS is explicit, errors are normalized at the application boundary, and health checks distinguish API availability from database availability. CI runs formatting, linting, type checking, and tests.
+Configuration comes from environment variables. Password hashing uses `pwdlib`, CORS is explicit, errors are normalized at the application boundary, and health checks distinguish API availability from database availability. CI runs formatting, linting, type checking, and tests.
+
+## Phase 3 authentication and sessions
+
+Authentication remains inside the modular monolith. Registration creates a user and a new organization, while login verifies the password with `pwdlib`, creates a `user_sessions` record, and issues an HS256 JWT containing the user ID and session ID. `core.auth.get_current_user` remains the single bearer-token dependency used by imports and other protected routes; session-bearing tokens are checked for ownership, revocation, and expiry.
+
+Logout revokes the current session in the database. Organization context is always derived from the authenticated user's organization; no endpoint accepts a client-selected organization for authorization. Password hashes, session secrets, and signing keys are never returned by API schemas.
+
+Implemented: registration, login, token issuance, authenticated user resolution, database-backed session management, logout, revocation, and tenant-aware authenticated context.
+
+Deferred: OAuth/social login, advanced identity providers, enterprise SSO, distributed session infrastructure, Redis-backed sessions, and microservices.

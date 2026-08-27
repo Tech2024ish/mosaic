@@ -6,6 +6,7 @@ const API_URL = "http://localhost:8000";
 type AuthMode = "login" | "register";
 type Job = { id: string; status: string; total_rows: number; successful_rows: number; failed_rows: number };
 type ImportError = { row_number: number; message: string; field_name: string | null };
+type CurrentUser = { id: string; email: string; name: string; organization_id: string; is_active: boolean };
 
 function App() {
   const [apiStatus, setApiStatus] = useState("checking connection");
@@ -14,6 +15,7 @@ function App() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [token, setToken] = useState(() => window.localStorage.getItem("mosaic_access_token") ?? "");
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authMessage, setAuthMessage] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [job, setJob] = useState<Job | null>(null);
@@ -29,6 +31,16 @@ function App() {
     fetch(`${API_URL}/health`).then((response) => (response.ok ? response.json() : Promise.reject()))
       .then(() => setApiStatus("API connected")).catch(() => setApiStatus("API unavailable"));
   }, []);
+
+  useEffect(() => {
+    if (!token) { setCurrentUser(null); return; }
+    fetch(`${API_URL}/api/v1/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Authentication expired");
+        setCurrentUser(await response.json());
+      })
+      .catch(() => { window.localStorage.removeItem("mosaic_access_token"); setToken(""); });
+  }, [token]);
 
   useEffect(() => {
     if (!job || ["completed", "failed"].includes(job.status)) return;
@@ -64,7 +76,10 @@ function App() {
     setJob(await response.json());
   };
 
-  const signOut = () => { window.localStorage.removeItem("mosaic_access_token"); setToken(""); setJob(null); };
+  const signOut = async () => {
+    if (token) await fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+    window.localStorage.removeItem("mosaic_access_token"); setToken(""); setCurrentUser(null); setJob(null);
+  };
   const switchMode = (mode: AuthMode) => { setAuthMode(mode); setAuthMessage(""); };
 
   return <div className="app-shell">
