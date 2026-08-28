@@ -40,3 +40,19 @@ class ImportErrorResponse(BaseModel):
     error_code: str
     message: str
     raw_value: str | None
+
+
+class ImportStatsResponse(BaseModel):
+    total_imports: int
+    successful_imports: int
+    failed_imports: int
+    processing_imports: int
+    total_rows: int
+    successful_rows: int
+    failed_rows: int
+
+
+class RetryResponse(BaseModel):
+    import_id: uuid.UUID
+    status: ImportStatus
+    message: str

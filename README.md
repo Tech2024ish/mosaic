@@ -68,7 +68,7 @@ alembic -c backend/alembic.ini upgrade head
 
 ## Scope boundary
 
-The foundation does not include forecasting, machine learning, optimization, scenario simulation, recommendations, ERP capabilities, or a complete authentication product. Those will be added incrementally, beginning with the data-ingestion pipeline.
+The foundation does not include forecasting, machine learning, optimization, scenario simulation, recommendations, or ERP capabilities. Those will be added incrementally after the ingestion and operations foundations.
 
 ## Authentication
 
@@ -88,3 +88,5 @@ The authentication endpoints are `POST /api/v1/auth/register`, `POST /api/v1/aut
 ## Phase 2 data ingestion
 
 The first ingestion workflow supports tenant-aware sales-history CSV imports. See [docs/data-ingestion.md](docs/data-ingestion.md) and [examples/sales_history.csv](examples/sales_history.csv) for the format, lifecycle, validation, and idempotency rules. Authenticated requests use a signed bearer token tied to an active database session.
+
+Phase 4 adds authenticated import history, detail/error inspection, retry controls for failed jobs, and tenant-scoped ingestion statistics. Distributed queues, Redis, Kafka, Celery, Kubernetes, advanced analytics, ML, forecasting, and optimization remain deferred.

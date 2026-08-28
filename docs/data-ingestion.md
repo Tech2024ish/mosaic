@@ -30,6 +30,10 @@ Uploads are limited by `MAX_UPLOAD_SIZE_BYTES` (25 MB by default), streamed in 1
 
 An import identity is SHA-256(content) scoped by organization and dataset type. A matching identity returns `409 Conflict`, so filename changes cannot cause a duplicate import. Normalized row fingerprints are SHA-256 hashes of the canonical row and are unique in `sales_history`; duplicate rows within a file or across imports become row-level `duplicate_record` errors. This conservative policy avoids double-counting but means a later correction must use a future explicit replacement/reconciliation workflow.
 
+## Phase 4 operations
+
+Authenticated operations endpoints are `GET /api/v1/imports`, `GET /api/v1/imports/{import_id}`, `GET /api/v1/imports/{import_id}/errors?offset=0&limit=50`, and `GET /api/v1/imports/stats`. They return only the current user's organization's jobs, errors, and aggregates. `POST /api/v1/imports/{import_id}/retry` is allowed only for failed jobs. It retains the source file and tenant, clears stale staging/errors, resets counters, and reuses the existing background processor. The state transition is `failed -> pending -> processing -> completed|failed`; row and file fingerprint duplicate protection remains active.
+
 ## Extension and performance
 
 Dataset dispatch is isolated in `domain/ingestion/registry.py`; a future inventory handler can register its parser, validator, and normalizer without changing upload orchestration. The parser is iterator-based and storage reads are chunked. Database writes use SQLAlchemy’s unit of work and can be batched as volumes grow; the current in-process worker is intentionally simple and is not durable across process restarts. A durable queue/worker should be introduced when job volume or runtime makes that limitation material.

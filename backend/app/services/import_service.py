@@ -3,7 +3,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.session import sessionmaker
@@ -12,6 +12,7 @@ from app.domain.ingestion.contracts import ValidationIssue
 from app.domain.ingestion.csv_parser import CsvFormatError
 from app.domain.ingestion.fingerprint import file_fingerprint, row_fingerprint
 from app.domain.ingestion.registry import get_dataset_parser
+from app.domain.ingestion.retry_policy import can_retry
 from app.domain.ingestion.sales import normalize_and_validate
 from app.infrastructure.storage.local import LocalFileStorage
 from app.models.import_error import ImportError
@@ -26,6 +27,10 @@ class DuplicateImportError(ValueError):
     def __init__(self, existing_job_id: str) -> None:
         super().__init__("This file has already been imported for this organization")
         self.existing_job_id = existing_job_id
+
+
+class ImportNotRetryableError(ValueError):
+    pass
 
 
 def create_import_job(
@@ -210,3 +215,83 @@ def process_import_job(
         )
     finally:
         db.close()
+
+
+def list_imports(
+    db: Session, organization_id: uuid.UUID, offset: int, limit: int
+) -> list[ImportJob]:
+    return list(
+        db.scalars(
+            select(ImportJob)
+            .where(ImportJob.organization_id == organization_id)
+            .order_by(ImportJob.created_at.desc(), ImportJob.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+    )
+
+
+def get_import_for_organization(
+    db: Session, import_id: uuid.UUID, organization_id: uuid.UUID
+) -> ImportJob | None:
+    return db.scalar(
+        select(ImportJob).where(
+            ImportJob.id == import_id, ImportJob.organization_id == organization_id
+        )
+    )
+
+
+def list_import_errors(
+    db: Session, import_id: uuid.UUID, offset: int, limit: int
+) -> list[ImportError]:
+    return list(
+        db.scalars(
+            select(ImportError)
+            .where(ImportError.import_job_id == import_id)
+            .order_by(ImportError.row_number, ImportError.id)
+            .offset(offset)
+            .limit(limit)
+        )
+    )
+
+
+def retry_import_job(db: Session, job: ImportJob) -> ImportJob:
+    if not can_retry(job.status):
+        raise ImportNotRetryableError("Only failed imports can be retried")
+    db.execute(delete(ImportError).where(ImportError.import_job_id == job.id))
+    db.execute(delete(StagingSalesRecord).where(StagingSalesRecord.import_job_id == job.id))
+    job.status = ImportStatus.PENDING.value
+    job.started_at = None
+    job.completed_at = None
+    job.total_rows = 0
+    job.successful_rows = 0
+    job.failed_rows = 0
+    job.error_summary = None
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def import_statistics(db: Session, organization_id: uuid.UUID) -> dict[str, int]:
+    row = db.execute(
+        select(
+            func.count(ImportJob.id),
+            func.count(ImportJob.id).filter(ImportJob.status == ImportStatus.COMPLETED.value),
+            func.count(ImportJob.id).filter(ImportJob.status == ImportStatus.FAILED.value),
+            func.count(ImportJob.id).filter(
+                ImportJob.status.in_((ImportStatus.PENDING.value, ImportStatus.PROCESSING.value))
+            ),
+            func.coalesce(func.sum(ImportJob.total_rows), 0),
+            func.coalesce(func.sum(ImportJob.successful_rows), 0),
+            func.coalesce(func.sum(ImportJob.failed_rows), 0),
+        ).where(ImportJob.organization_id == organization_id)
+    ).one()
+    return {
+        "total_imports": int(row[0]),
+        "successful_imports": int(row[1]),
+        "failed_imports": int(row[2]),
+        "processing_imports": int(row[3]),
+        "total_rows": int(row[4]),
+        "successful_rows": int(row[5]),
+        "failed_rows": int(row[6]),
+    }

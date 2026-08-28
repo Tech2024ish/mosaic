@@ -11,8 +11,27 @@ from app.infrastructure.storage.local import FileTooLargeError, LocalFileStorage
 from app.models.import_error import ImportError
 from app.models.import_job import ImportJob
 from app.models.user import User
-from app.schemas.imports import DatasetType, ImportErrorResponse, ImportJobResponse
-from app.services.import_service import DuplicateImportError, create_import_job, process_import_job
+from app.schemas.imports import (
+    DatasetType,
+    ImportErrorResponse,
+    ImportJobResponse,
+    ImportStatsResponse,
+    RetryResponse,
+)
+from app.schemas.imports import (
+    ImportStatus as ImportStatusSchema,
+)
+from app.services.import_service import (
+    DuplicateImportError,
+    ImportNotRetryableError,
+    create_import_job,
+    get_import_for_organization,
+    import_statistics,
+    list_import_errors,
+    list_imports,
+    process_import_job,
+    retry_import_job,
+)
 
 router = APIRouter(prefix="/imports", tags=["imports"])
 
@@ -70,6 +89,27 @@ async def upload_import(
     return job
 
 
+@router.get("/stats", response_model=ImportStatsResponse)
+def get_import_stats(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+) -> dict[str, int]:
+    return import_statistics(db, current_user.organization_id)
+
+
+@router.get("", response_model=list[ImportJobResponse])
+def get_import_history(
+    offset: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[ImportJob]:
+    if offset < 0 or limit < 1 or limit > 100:
+        raise HTTPException(
+            status_code=422, detail="offset must be non-negative and limit must be 1-100"
+        )
+    return list_imports(db, current_user.organization_id, offset, limit)
+
+
 @router.get("/{import_id}", response_model=ImportJobResponse)
 def get_import(
     import_id: uuid.UUID,
@@ -82,14 +122,37 @@ def get_import(
 @router.get("/{import_id}/errors", response_model=list[ImportErrorResponse])
 def get_import_errors(
     import_id: uuid.UUID,
+    offset: int = 0,
+    limit: int = 50,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[ImportError]:
     get_owned_import(db, import_id, current_user.organization_id)
-    return list(
-        db.scalars(
-            select(ImportError)
-            .where(ImportError.import_job_id == import_id)
-            .order_by(ImportError.row_number)
+    if offset < 0 or limit < 1 or limit > 100:
+        raise HTTPException(
+            status_code=422, detail="offset must be non-negative and limit must be 1-100"
         )
+    return list_import_errors(db, import_id, offset, limit)
+
+
+@router.post("/{import_id}/retry", response_model=RetryResponse)
+def retry_import(
+    import_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RetryResponse:
+    job = get_import_for_organization(db, import_id, current_user.organization_id)
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Import not found")
+    try:
+        retry_import_job(db, job)
+    except ImportNotRetryableError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    file_storage = storage()
+    background_tasks.add_task(process_import_job, job.id, file_storage, SessionLocal)
+    return RetryResponse(
+        import_id=job.id,
+        status=ImportStatusSchema(job.status),
+        message="Import queued for retry",
     )
