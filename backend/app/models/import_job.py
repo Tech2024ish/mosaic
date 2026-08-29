@@ -17,15 +17,17 @@ class ImportStatus(enum.StrEnum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class ImportJob(TimestampedModel):
     __tablename__ = "import_jobs"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'processing', 'completed', 'failed')", name="valid_status"
+            "status IN ('pending', 'processing', 'completed', 'failed', 'cancelled')",
+            name="valid_import_status",
         ),
-        CheckConstraint("dataset_type IN ('sales_history')", name="valid_dataset_type"),
+        CheckConstraint("dataset_type IN ('sales_history')", name="valid_import_dataset"),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -56,3 +58,4 @@ class ImportJob(TimestampedModel):
         "StagingSalesRecord", back_populates="import_job", cascade="all, delete-orphan"
     )
     sales_records = relationship("SalesHistory", back_populates="import_job")
+    events = relationship("ImportEvent", back_populates="import_job", cascade="all, delete-orphan")

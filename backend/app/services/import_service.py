@@ -2,20 +2,24 @@ import logging
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.session import sessionmaker
 
+from app.domain.ingestion.audit_policy import ImportEventType
 from app.domain.ingestion.contracts import ValidationIssue
 from app.domain.ingestion.csv_parser import CsvFormatError
 from app.domain.ingestion.fingerprint import file_fingerprint, row_fingerprint
 from app.domain.ingestion.registry import get_dataset_parser
-from app.domain.ingestion.retry_policy import can_retry
+from app.domain.ingestion.retry_policy import can_cancel, can_retry
 from app.domain.ingestion.sales import normalize_and_validate
 from app.infrastructure.storage.local import LocalFileStorage
 from app.models.import_error import ImportError
+from app.models.import_event import ImportEvent
 from app.models.import_job import ImportJob, ImportStatus
 from app.models.sales_history import SalesHistory
 from app.models.staging_sales_record import StagingSalesRecord
@@ -30,6 +34,10 @@ class DuplicateImportError(ValueError):
 
 
 class ImportNotRetryableError(ValueError):
+    pass
+
+
+class ImportNotCancellableError(ValueError):
     pass
 
 
@@ -71,7 +79,39 @@ def create_import_job(
         db.rollback()
         raise DuplicateImportError("unknown") from exc
     db.refresh(job)
+    record_import_event(db, job, ImportEventType.CREATED, created_by)
+    logger.info(
+        "Import accepted",
+        extra={
+            "import_id": str(job.id),
+            "organization_id": str(organization_id),
+            "user_id": str(created_by),
+            "dataset_type": dataset_type,
+            "status": job.status,
+        },
+    )
     return job
+
+
+def record_import_event(
+    db: Session,
+    job: ImportJob,
+    event_type: ImportEventType,
+    actor_id: uuid.UUID | None = None,
+    metadata: dict[str, object] | None = None,
+) -> ImportEvent:
+    event = ImportEvent(
+        import_job_id=job.id,
+        organization_id=job.organization_id,
+        event_type=event_type.value,
+        actor_id=actor_id,
+        event_metadata=metadata,
+        created_at=datetime.now(UTC),
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
 
 
 def process_import_job(
@@ -84,9 +124,20 @@ def process_import_job(
         job = db.scalar(select(ImportJob).where(ImportJob.id == job_id))
         if job is None or job.status != ImportStatus.PENDING.value:
             return
-        job.status = ImportStatus.PROCESSING.value
-        job.started_at = started
+        started_result = cast(
+            CursorResult[Any],
+            db.execute(
+                update(ImportJob)
+                .where(ImportJob.id == job.id, ImportJob.status == ImportStatus.PENDING.value)
+                .values(status=ImportStatus.PROCESSING.value, started_at=started)
+            ),
+        )
+        if started_result.rowcount != 1:
+            db.rollback()
+            return
         db.commit()
+        db.refresh(job)
+        record_import_event(db, job, ImportEventType.PROCESSING_STARTED)
         parser, required_columns, aliases = get_dataset_parser(job.dataset_type)
         valid_rows = []
         errors: list[tuple[ValidationIssue, dict[str, str]]] = []
@@ -94,6 +145,20 @@ def process_import_job(
         with storage.open(job.storage_key) as stream:
             try:
                 for parsed in parser(stream, required_columns, aliases):
+                    if db.scalar(
+                        select(ImportJob.id).where(
+                            ImportJob.id == job.id,
+                            ImportJob.status == ImportStatus.CANCELLED.value,
+                        )
+                    ):
+                        logger.info(
+                            "Import cancelled",
+                            extra={
+                                "import_id": str(job.id),
+                                "organization_id": str(job.organization_id),
+                            },
+                        )
+                        return
                     total += 1
                     normalized, row_issues = normalize_and_validate(parsed)
                     if normalized is not None:
@@ -180,10 +245,34 @@ def process_import_job(
             "error_count": job.failed_rows,
             "codes": sorted({issue.error_code for issue, _ in errors if issue is not None}),
         }
+        completed = cast(
+            CursorResult[Any],
+            db.execute(
+                update(ImportJob)
+                .where(ImportJob.id == job.id, ImportJob.status == ImportStatus.PROCESSING.value)
+                .values(
+                    status=ImportStatus.COMPLETED.value,
+                    completed_at=datetime.now(UTC),
+                    total_rows=total,
+                    successful_rows=job.successful_rows,
+                    failed_rows=job.failed_rows,
+                    error_summary=job.error_summary,
+                )
+            ),
+        )
+        if completed.rowcount != 1:
+            db.rollback()
+            return
         job.status = ImportStatus.COMPLETED.value
         completed_at = datetime.now(UTC)
         job.completed_at = completed_at
         db.commit()
+        record_import_event(
+            db,
+            job,
+            ImportEventType.COMPLETED,
+            metadata={"total_rows": total, "failed_rows": job.failed_rows},
+        )
         logger.info(
             "Import completed",
             extra={
@@ -201,7 +290,7 @@ def process_import_job(
         db.rollback()
         if job is not None:
             job = db.scalar(select(ImportJob).where(ImportJob.id == job_id))
-            if job:
+            if job and job.status != ImportStatus.CANCELLED.value:
                 job.status = ImportStatus.FAILED.value
                 job.completed_at = datetime.now(UTC)
                 job.error_summary = {
@@ -210,6 +299,9 @@ def process_import_job(
                     "message": "Import processing failed",
                 }
                 db.commit()
+                record_import_event(
+                    db, job, ImportEventType.FAILED, metadata={"failure_reason": type(exc).__name__}
+                )
         logger.exception(
             "Import failed", extra={"import_id": str(job_id), "failure_reason": type(exc).__name__}
         )
@@ -255,21 +347,90 @@ def list_import_errors(
     )
 
 
-def retry_import_job(db: Session, job: ImportJob) -> ImportJob:
+def retry_import_job(db: Session, job: ImportJob, actor_id: uuid.UUID) -> ImportJob:
     if not can_retry(job.status):
         raise ImportNotRetryableError("Only failed imports can be retried")
+    transitioned = cast(
+        CursorResult[Any],
+        db.execute(
+            update(ImportJob)
+            .where(ImportJob.id == job.id, ImportJob.status == ImportStatus.FAILED.value)
+            .values(
+                status=ImportStatus.PENDING.value,
+                started_at=None,
+                completed_at=None,
+                total_rows=0,
+                successful_rows=0,
+                failed_rows=0,
+                error_summary=None,
+            )
+        ),
+    )
+    if transitioned.rowcount != 1:
+        db.rollback()
+        raise ImportNotRetryableError("Import state changed; retry it again if it is still failed")
     db.execute(delete(ImportError).where(ImportError.import_job_id == job.id))
     db.execute(delete(StagingSalesRecord).where(StagingSalesRecord.import_job_id == job.id))
-    job.status = ImportStatus.PENDING.value
-    job.started_at = None
-    job.completed_at = None
-    job.total_rows = 0
-    job.successful_rows = 0
-    job.failed_rows = 0
-    job.error_summary = None
     db.commit()
     db.refresh(job)
+    record_import_event(db, job, ImportEventType.RETRY_REQUESTED, actor_id)
+    logger.info(
+        "Import retry requested",
+        extra={
+            "import_id": str(job.id),
+            "organization_id": str(job.organization_id),
+            "user_id": str(actor_id),
+            "status": job.status,
+        },
+    )
     return job
+
+
+def cancel_import_job(db: Session, job: ImportJob, actor_id: uuid.UUID) -> ImportJob:
+    if not can_cancel(job.status):
+        raise ImportNotCancellableError("Only pending or processing imports can be cancelled")
+    transitioned = cast(
+        CursorResult[Any],
+        db.execute(
+            update(ImportJob)
+            .where(
+                ImportJob.id == job.id,
+                ImportJob.organization_id == job.organization_id,
+                ImportJob.status.in_((ImportStatus.PENDING.value, ImportStatus.PROCESSING.value)),
+            )
+            .values(status=ImportStatus.CANCELLED.value, completed_at=datetime.now(UTC))
+        ),
+    )
+    if transitioned.rowcount != 1:
+        db.rollback()
+        raise ImportNotCancellableError("Import state changed; it can no longer be cancelled")
+    db.commit()
+    db.refresh(job)
+    record_import_event(db, job, ImportEventType.CANCELLED, actor_id)
+    logger.info(
+        "Import cancelled",
+        extra={
+            "import_id": str(job.id),
+            "organization_id": str(job.organization_id),
+            "user_id": str(actor_id),
+            "status": job.status,
+        },
+    )
+    return job
+
+
+def list_import_events(
+    db: Session, import_id: uuid.UUID, offset: int, limit: int
+) -> list[ImportEvent]:
+    return list(
+        db.scalars(
+            select(ImportEvent)
+            .where(ImportEvent.import_job_id == import_id)
+            .order_by(ImportEvent.created_at, ImportEvent.id)
+            .offset(offset)
+            .limit(limit)
+        )
+    )
 
 
 def import_statistics(db: Session, organization_id: uuid.UUID) -> dict[str, int]:
@@ -281,17 +442,26 @@ def import_statistics(db: Session, organization_id: uuid.UUID) -> dict[str, int]
             func.count(ImportJob.id).filter(
                 ImportJob.status.in_((ImportStatus.PENDING.value, ImportStatus.PROCESSING.value))
             ),
+            func.count(ImportJob.id).filter(ImportJob.status == ImportStatus.CANCELLED.value),
             func.coalesce(func.sum(ImportJob.total_rows), 0),
             func.coalesce(func.sum(ImportJob.successful_rows), 0),
             func.coalesce(func.sum(ImportJob.failed_rows), 0),
         ).where(ImportJob.organization_id == organization_id)
     ).one()
+    retry_count = db.scalar(
+        select(func.count(ImportEvent.id)).where(
+            ImportEvent.organization_id == organization_id,
+            ImportEvent.event_type == ImportEventType.RETRY_REQUESTED.value,
+        )
+    )
     return {
         "total_imports": int(row[0]),
         "successful_imports": int(row[1]),
         "failed_imports": int(row[2]),
         "processing_imports": int(row[3]),
-        "total_rows": int(row[4]),
-        "successful_rows": int(row[5]),
-        "failed_rows": int(row[6]),
+        "cancelled_imports": int(row[4]),
+        "retry_count": int(retry_count or 0),
+        "total_rows": int(row[5]),
+        "successful_rows": int(row[6]),
+        "failed_rows": int(row[7]),
     }

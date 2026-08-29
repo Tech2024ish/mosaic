@@ -27,4 +27,7 @@ nav { display: flex; gap: 30px; margin-right: auto; color: #61716b; font-size: .
 .detail-card { margin-top: 22px; padding: 20px; background: #f8faf7; border-radius: 14px; overflow-wrap: anywhere; }
 .detail-card h3 { font-size: .85rem; margin: 5px 0; }
 .empty-state { color: #68766e; }
+.operation-actions { display: grid; gap: 12px; margin-top: 16px; }
+.event-list { display: grid; gap: 6px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #e5e9e3; }
+.event-list small { color: #68766e; text-transform: capitalize; }
 @media (max-width: 700px) { .operations-section { margin: 0 18px 64px; padding: 22px; } .stats-grid { grid-template-columns: 1fr; } .history-row { grid-template-columns: 1fr auto; gap: 10px; } }

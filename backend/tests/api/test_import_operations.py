@@ -116,3 +116,47 @@ def test_retry_cannot_cross_tenant_boundary() -> None:
         ).status_code
         == 200
     )
+
+
+def test_cancel_and_audit_events_are_tenant_scoped() -> None:
+    client = TestClient(app)
+    first, first_token = register_and_login(client)
+    second, second_token = register_and_login(client)
+    pending_id = make_job(first["email"], ImportStatus.PENDING.value)
+    headers = {"Authorization": f"Bearer {first_token}"}
+
+    cancelled = client.post(f"/api/v1/imports/{pending_id}/cancel", headers=headers)
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+    events = client.get(f"/api/v1/imports/{pending_id}/events", headers=headers)
+    assert [event["event_type"] for event in events.json()] == ["created", "cancelled"]
+    assert client.post(f"/api/v1/imports/{pending_id}/cancel", headers=headers).status_code == 409
+    assert (
+        client.get(
+            f"/api/v1/imports/{pending_id}/events",
+            headers={"Authorization": f"Bearer {second_token}"},
+        ).status_code
+        == 404
+    )
+
+
+def test_validation_report_is_csv_and_tenant_scoped() -> None:
+    client = TestClient(app)
+    first, first_token = register_and_login(client)
+    second, second_token = register_and_login(client)
+    failed_id = make_job(first["email"], ImportStatus.FAILED.value)
+    headers = {"Authorization": f"Bearer {first_token}"}
+
+    report = client.get(f"/api/v1/imports/{failed_id}/errors/report", headers=headers)
+    assert report.status_code == 200
+    assert report.headers["content-type"].startswith("text/csv")
+    assert report.headers["content-disposition"].endswith('errors.csv"')
+    assert "row_number,field_name,error_message" in report.text
+    assert "3,,Invalid date" in report.text
+    assert (
+        client.get(
+            f"/api/v1/imports/{failed_id}/errors/report",
+            headers={"Authorization": f"Bearer {second_token}"},
+        ).status_code
+        == 404
+    )

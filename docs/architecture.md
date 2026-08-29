@@ -37,3 +37,9 @@ Logout revokes the current session in the database. Organization context is alwa
 Implemented: registration, login, token issuance, authenticated user resolution, database-backed session management, logout, revocation, and tenant-aware authenticated context.
 
 Deferred: OAuth/social login, advanced identity providers, enterprise SSO, distributed session infrastructure, Redis-backed sessions, and microservices.
+
+## Phase 5 ingestion operations
+
+Import administration remains tenant-scoped and uses the existing database and in-process `BackgroundTasks` worker. Failed jobs can be retried using the existing file and row fingerprints. Pending and processing jobs can be cooperatively cancelled; the processor checks the database between rows and uses a conditional completion update so a cancellation cannot be overwritten by a late completion.
+
+Important lifecycle events are recorded in `import_events` with the import, organization, event type, optional actor, timestamp, and safe metadata. Validation reports are streamed from tenant-verified database errors as CSV. Operational statistics include import outcomes, row counts, cancellations, and retry requests. Logs use standard-library structured `extra` fields and never include uploaded content, credentials, tokens, or secrets.

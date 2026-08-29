@@ -36,4 +36,10 @@ Authenticated operations endpoints are `GET /api/v1/imports`, `GET /api/v1/impor
 
 ## Extension and performance
 
+## Phase 5 administration and auditability
+
+Import operations are available only to authenticated users and remain scoped to the user's organization. `POST /api/v1/imports/{import_id}/cancel` cooperatively cancels pending or processing imports. A processor checks for cancellation between rows and uses a conditional completion update; it is not forcibly terminated. Completed, failed, and already-cancelled imports cannot be cancelled.
+
+`GET /api/v1/imports/{import_id}/events` exposes a paginated, deterministic activity history. Events include creation, processing start, completion, failure, retry request, and cancellation. `GET /api/v1/imports/{import_id}/errors/report` streams a server-generated CSV validation report with a safe generated filename. `GET /api/v1/imports/stats` includes cancellations and retry counts in addition to row totals.
+
 Dataset dispatch is isolated in `domain/ingestion/registry.py`; a future inventory handler can register its parser, validator, and normalizer without changing upload orchestration. The parser is iterator-based and storage reads are chunked. Database writes use SQLAlchemy’s unit of work and can be batched as volumes grow; the current in-process worker is intentionally simple and is not durable across process restarts. A durable queue/worker should be introduced when job volume or runtime makes that limitation material.

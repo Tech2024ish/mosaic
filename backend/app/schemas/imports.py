@@ -14,6 +14,7 @@ class ImportStatus(StrEnum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class ImportJobResponse(BaseModel):
@@ -46,10 +47,28 @@ class ImportStatsResponse(BaseModel):
     total_imports: int
     successful_imports: int
     failed_imports: int
+    cancelled_imports: int
+    retry_count: int
     processing_imports: int
     total_rows: int
     successful_rows: int
     failed_rows: int
+
+
+class ImportEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    event_type: str
+    actor_id: uuid.UUID | None
+    event_metadata: dict[str, object] | None
+    created_at: datetime
+
+
+class CancelResponse(BaseModel):
+    import_id: uuid.UUID
+    status: ImportStatus
+    message: str
 
 
 class RetryResponse(BaseModel):

@@ -90,3 +90,5 @@ The authentication endpoints are `POST /api/v1/auth/register`, `POST /api/v1/aut
 The first ingestion workflow supports tenant-aware sales-history CSV imports. See [docs/data-ingestion.md](docs/data-ingestion.md) and [examples/sales_history.csv](examples/sales_history.csv) for the format, lifecycle, validation, and idempotency rules. Authenticated requests use a signed bearer token tied to an active database session.
 
 Phase 4 adds authenticated import history, detail/error inspection, retry controls for failed jobs, and tenant-scoped ingestion statistics. Distributed queues, Redis, Kafka, Celery, Kubernetes, advanced analytics, ML, forecasting, and optimization remain deferred.
+
+Phase 5 adds cooperative import cancellation, tenant-scoped import activity history, streamed validation-error reports, structured ingestion logs, and lightweight operational metrics through the existing statistics API.

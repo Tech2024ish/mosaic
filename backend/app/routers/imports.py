@@ -1,6 +1,18 @@
+import csv
+import io
 import uuid
+from collections.abc import Generator
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    UploadFile,
+    status,
+)
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -9,11 +21,14 @@ from app.core.config import get_settings
 from app.infrastructure.database.session import SessionLocal, get_db
 from app.infrastructure.storage.local import FileTooLargeError, LocalFileStorage
 from app.models.import_error import ImportError
+from app.models.import_event import ImportEvent
 from app.models.import_job import ImportJob
 from app.models.user import User
 from app.schemas.imports import (
+    CancelResponse,
     DatasetType,
     ImportErrorResponse,
+    ImportEventResponse,
     ImportJobResponse,
     ImportStatsResponse,
     RetryResponse,
@@ -23,11 +38,14 @@ from app.schemas.imports import (
 )
 from app.services.import_service import (
     DuplicateImportError,
+    ImportNotCancellableError,
     ImportNotRetryableError,
+    cancel_import_job,
     create_import_job,
     get_import_for_organization,
     import_statistics,
     list_import_errors,
+    list_import_events,
     list_imports,
     process_import_job,
     retry_import_job,
@@ -119,6 +137,42 @@ def get_import(
     return get_owned_import(db, import_id, current_user.organization_id)
 
 
+@router.get("/{import_id}/errors/report")
+def download_error_report(
+    import_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    job = get_owned_import(db, import_id, current_user.organization_id)
+
+    def report_rows() -> Generator[str, None, None]:
+        output = io.StringIO(newline="")
+        writer = csv.writer(output, lineterminator="\n")
+        writer.writerow(("row_number", "field_name", "error_message"))
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+        with SessionLocal() as report_db:
+            report_query = report_db.scalars(
+                select(ImportError)
+                .where(ImportError.import_job_id == job.id)
+                .order_by(ImportError.row_number, ImportError.id)
+            )
+            for error in report_query.yield_per(1000):
+                writer.writerow((error.row_number, error.field_name or "", error.message))
+                yield output.getvalue()
+                output.seek(0)
+                output.truncate(0)
+
+    return StreamingResponse(
+        report_rows(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="mosaic-import-{job.id}-errors.csv"'
+        },
+    )
+
+
 @router.get("/{import_id}/errors", response_model=list[ImportErrorResponse])
 def get_import_errors(
     import_id: uuid.UUID,
@@ -135,6 +189,22 @@ def get_import_errors(
     return list_import_errors(db, import_id, offset, limit)
 
 
+@router.get("/{import_id}/events", response_model=list[ImportEventResponse])
+def get_import_events(
+    import_id: uuid.UUID,
+    offset: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[ImportEvent]:
+    get_owned_import(db, import_id, current_user.organization_id)
+    if offset < 0 or limit < 1 or limit > 100:
+        raise HTTPException(
+            status_code=422, detail="offset must be non-negative and limit must be 1-100"
+        )
+    return list_import_events(db, import_id, offset, limit)
+
+
 @router.post("/{import_id}/retry", response_model=RetryResponse)
 def retry_import(
     import_id: uuid.UUID,
@@ -146,7 +216,7 @@ def retry_import(
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Import not found")
     try:
-        retry_import_job(db, job)
+        retry_import_job(db, job, current_user.id)
     except ImportNotRetryableError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     file_storage = storage()
@@ -155,4 +225,22 @@ def retry_import(
         import_id=job.id,
         status=ImportStatusSchema(job.status),
         message="Import queued for retry",
+    )
+
+
+@router.post("/{import_id}/cancel", response_model=CancelResponse)
+def cancel_import(
+    import_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CancelResponse:
+    job = get_import_for_organization(db, import_id, current_user.organization_id)
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Import not found")
+    try:
+        cancel_import_job(db, job, current_user.id)
+    except ImportNotCancellableError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return CancelResponse(
+        import_id=job.id, status=ImportStatusSchema(job.status), message="Import cancelled"
     )
