@@ -38,6 +38,12 @@ Implemented: registration, login, token issuance, authenticated user resolution,
 
 Deferred: OAuth/social login, advanced identity providers, enterprise SSO, distributed session infrastructure, Redis-backed sessions, and microservices.
 
+## Phase 6 master data
+
+Master data uses the same modular-monolith ingestion boundary as sales history. Dataset dispatch is centralized in the ingestion registry, while dataset-specific normalization and persistence rules live in the domain/service layers. Products, warehouses, suppliers, and inventory snapshots are tenant-owned models exposed through tenant-scoped APIs. Inventory rows resolve stable business codes to same-organization product and warehouse records before persistence. The existing import lifecycle, retry, cancellation, audit events, validation reports, and statistics remain shared across datasets.
+
+The Phase 6 migration is `0006_master_data`; no distributed queue or analytics infrastructure is introduced.
+
 ## Phase 5 ingestion operations
 
 Import administration remains tenant-scoped and uses the existing database and in-process `BackgroundTasks` worker. Failed jobs can be retried using the existing file and row fingerprints. Pending and processing jobs can be cooperatively cancelled; the processor checks the database between rows and uses a conditional completion update so a cancellation cannot be overwritten by a late completion.

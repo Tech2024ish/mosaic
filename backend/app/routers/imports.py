@@ -8,6 +8,7 @@ from fastapi import (
     BackgroundTasks,
     Depends,
     File,
+    Form,
     HTTPException,
     UploadFile,
     status,
@@ -74,7 +75,7 @@ def get_owned_import(db: Session, import_id: uuid.UUID, organization_id: uuid.UU
 async def upload_import(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    dataset_type: DatasetType = DatasetType.SALES_HISTORY,
+    dataset_type: DatasetType = Form(DatasetType.SALES_HISTORY),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ImportJob:

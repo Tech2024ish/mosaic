@@ -36,6 +36,25 @@ Authenticated operations endpoints are `GET /api/v1/imports`, `GET /api/v1/impor
 
 ## Extension and performance
 
+## Phase 6 master-data datasets
+
+The same authenticated upload endpoint accepts these additional dataset types:
+
+| Dataset | Required CSV columns |
+|---|---|
+| `products` | `product_code,product_name` |
+| `warehouses` | `warehouse_code,warehouse_name` |
+| `suppliers` | `supplier_code,supplier_name` |
+| `inventory_snapshots` | `snapshot_date,product_code,warehouse_code,quantity_on_hand` |
+
+Optional product columns are `description`, `category`, `unit_of_measure`, and `is_active`. Warehouses may include `location,is_active`; suppliers may include `contact_name,contact_email,contact_phone,is_active`; inventory may include `unit_cost`.
+
+Codes are trimmed and normalized to uppercase. Required values, ISO dates, non-negative quantities/costs, booleans, and supplier email syntax are validated. Existing master-data codes and duplicate codes in a file are rejected as row-level `duplicate_record` errors; imports do not silently overwrite master data. Inventory references must resolve to product and warehouse records in the authenticated organization. Snapshots are historical and a repeated organization/product/warehouse/date is rejected.
+
+Master-data APIs are `GET/POST /api/v1/products`, `GET/PATCH /api/v1/products/{id}`, `GET/POST /api/v1/warehouses`, `GET/PATCH /api/v1/warehouses/{id}`, `GET/POST /api/v1/suppliers`, `GET/PATCH /api/v1/suppliers/{id}`, and `GET/POST /api/v1/inventory` with `GET /api/v1/inventory/{id}`. All use the JWT-authenticated user's organization; no client organization ID is accepted for authorization. Existing history, retry, cancellation, audit-event, error-report, and statistics endpoints apply to every dataset.
+
+The frontend provides dataset selection during upload and a tenant-scoped reference-data browser. Processing remains in-process and cooperative, so jobs are not durable across process restarts.
+
 ## Phase 5 administration and auditability
 
 Import operations are available only to authenticated users and remain scoped to the user's organization. `POST /api/v1/imports/{import_id}/cancel` cooperatively cancels pending or processing imports. A processor checks for cancellation between rows and uses a conditional completion update; it is not forcibly terminated. Completed, failed, and already-cancelled imports cannot be cancelled.

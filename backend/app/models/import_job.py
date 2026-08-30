@@ -10,6 +10,10 @@ from app.models.base import TimestampedModel
 
 class DatasetType(enum.StrEnum):
     SALES_HISTORY = "sales_history"
+    PRODUCTS = "products"
+    WAREHOUSES = "warehouses"
+    SUPPLIERS = "suppliers"
+    INVENTORY_SNAPSHOTS = "inventory_snapshots"
 
 
 class ImportStatus(enum.StrEnum):
@@ -27,7 +31,10 @@ class ImportJob(TimestampedModel):
             "status IN ('pending', 'processing', 'completed', 'failed', 'cancelled')",
             name="valid_import_status",
         ),
-        CheckConstraint("dataset_type IN ('sales_history')", name="valid_import_dataset"),
+        CheckConstraint(
+            "dataset_type IN ('sales_history', 'products', 'warehouses', 'suppliers', 'inventory_snapshots')",
+            name="valid_import_dataset",
+        ),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(

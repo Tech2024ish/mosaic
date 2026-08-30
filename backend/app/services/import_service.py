@@ -17,12 +17,17 @@ from app.domain.ingestion.fingerprint import file_fingerprint, row_fingerprint
 from app.domain.ingestion.registry import get_dataset_parser
 from app.domain.ingestion.retry_policy import can_cancel, can_retry
 from app.domain.ingestion.sales import normalize_and_validate
+from app.domain.master_data.normalization import normalize_master_row
 from app.infrastructure.storage.local import LocalFileStorage
 from app.models.import_error import ImportError
 from app.models.import_event import ImportEvent
-from app.models.import_job import ImportJob, ImportStatus
+from app.models.import_job import DatasetType, ImportJob, ImportStatus
+from app.models.inventory_snapshot import InventorySnapshot
+from app.models.product import Product
 from app.models.sales_history import SalesHistory
 from app.models.staging_sales_record import StagingSalesRecord
+from app.models.supplier import Supplier
+from app.models.warehouse import Warehouse
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +143,9 @@ def process_import_job(
         db.commit()
         db.refresh(job)
         record_import_event(db, job, ImportEventType.PROCESSING_STARTED)
+        if job.dataset_type != DatasetType.SALES_HISTORY.value:
+            _process_master_import(db, job, storage)
+            return
         parser, required_columns, aliases = get_dataset_parser(job.dataset_type)
         valid_rows = []
         errors: list[tuple[ValidationIssue, dict[str, str]]] = []
@@ -307,6 +315,166 @@ def process_import_job(
         )
     finally:
         db.close()
+
+
+def _process_master_import(db: Session, job: ImportJob, storage: LocalFileStorage) -> None:
+    parser, required_columns, aliases = get_dataset_parser(job.dataset_type)
+    valid_rows: list[dict[str, object]] = []
+    errors: list[ValidationIssue] = []
+    total = 0
+    with storage.open(job.storage_key) as stream:
+        for parsed in parser(stream, required_columns, aliases):
+            total += 1
+            if (
+                total % 100 == 0
+                and db.scalar(select(ImportJob.status).where(ImportJob.id == job.id))
+                == ImportStatus.CANCELLED.value
+            ):
+                db.rollback()
+                return
+            normalized, issues = normalize_master_row(parsed, job.dataset_type)
+            if normalized is None:
+                errors.extend(issues)
+            else:
+                valid_rows.append(normalized)
+    seen: set[tuple[object, ...]] = set()
+    for row in valid_rows:
+        model: Product | Warehouse | Supplier | InventorySnapshot
+        key: tuple[object, ...]
+        row_number = int(cast(int, row["row_number"]))
+        if job.dataset_type == "products":
+            key = (row["product_code"],)
+            exists = (
+                db.scalar(
+                    select(Product.id).where(
+                        Product.organization_id == job.organization_id,
+                        Product.product_code == row["product_code"],
+                    )
+                )
+                is not None
+            )
+            model = Product(
+                organization_id=job.organization_id,
+                **{k: v for k, v in row.items() if k != "row_number"},
+            )
+        elif job.dataset_type == "warehouses":
+            key = (row["warehouse_code"],)
+            exists = (
+                db.scalar(
+                    select(Warehouse.id).where(
+                        Warehouse.organization_id == job.organization_id,
+                        Warehouse.warehouse_code == row["warehouse_code"],
+                    )
+                )
+                is not None
+            )
+            model = Warehouse(
+                organization_id=job.organization_id,
+                **{k: v for k, v in row.items() if k != "row_number"},
+            )
+        elif job.dataset_type == "suppliers":
+            key = (row["supplier_code"],)
+            exists = (
+                db.scalar(
+                    select(Supplier.id).where(
+                        Supplier.organization_id == job.organization_id,
+                        Supplier.supplier_code == row["supplier_code"],
+                    )
+                )
+                is not None
+            )
+            model = Supplier(
+                organization_id=job.organization_id,
+                **{k: v for k, v in row.items() if k != "row_number"},
+            )
+        else:
+            product_record = db.scalar(
+                select(Product).where(
+                    Product.organization_id == job.organization_id,
+                    Product.product_code == row["product_code"],
+                )
+            )
+            warehouse_record = db.scalar(
+                select(Warehouse).where(
+                    Warehouse.organization_id == job.organization_id,
+                    Warehouse.warehouse_code == row["warehouse_code"],
+                )
+            )
+            if product_record is None or warehouse_record is None:
+                errors.append(
+                    ValidationIssue(
+                        row_number,
+                        "invalid_reference",
+                        "product_code and warehouse_code must exist in this organization",
+                    )
+                )
+                continue
+            key = (product_record.id, warehouse_record.id, row["snapshot_date"])
+            exists = (
+                db.scalar(
+                    select(InventorySnapshot.id).where(
+                        InventorySnapshot.organization_id == job.organization_id,
+                        InventorySnapshot.product_id == product_record.id,
+                        InventorySnapshot.warehouse_id == warehouse_record.id,
+                        InventorySnapshot.snapshot_date == row["snapshot_date"],
+                    )
+                )
+                is not None
+            )
+            model = InventorySnapshot(
+                organization_id=job.organization_id,
+                product_id=product_record.id,
+                warehouse_id=warehouse_record.id,
+                **{
+                    k: v
+                    for k, v in row.items()
+                    if k not in {"row_number", "product_code", "warehouse_code"}
+                },
+            )
+        if exists or key in seen:
+            errors.append(
+                ValidationIssue(
+                    row_number,
+                    "duplicate_record",
+                    "Record already exists for this organization or appears earlier in the file",
+                )
+            )
+            continue
+        seen.add(key)
+        db.add(model)
+    if (
+        db.scalar(select(ImportJob.status).where(ImportJob.id == job.id))
+        == ImportStatus.CANCELLED.value
+    ):
+        db.rollback()
+        return
+    for issue in errors:
+        db.add(
+            ImportError(
+                import_job_id=job.id,
+                row_number=issue.row_number,
+                field_name=issue.field_name,
+                error_code=issue.error_code,
+                message=issue.message,
+                raw_value=issue.raw_value,
+            )
+        )
+    job.total_rows = total
+    job.failed_rows = len(errors)
+    job.successful_rows = total - len(errors)
+    job.error_summary = {
+        "error_count": len(errors),
+        "codes": sorted({issue.error_code for issue in errors}),
+    }
+    job.status = ImportStatus.COMPLETED.value
+    job.completed_at = datetime.now(UTC)
+    db.commit()
+    record_import_event(
+        db,
+        job,
+        ImportEventType.COMPLETED,
+        metadata={"total_rows": total, "failed_rows": len(errors)},
+    )
 
 
 def list_imports(

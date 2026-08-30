@@ -7,6 +7,10 @@ from pydantic import BaseModel, ConfigDict
 
 class DatasetType(StrEnum):
     SALES_HISTORY = "sales_history"
+    PRODUCTS = "products"
+    WAREHOUSES = "warehouses"
+    SUPPLIERS = "suppliers"
+    INVENTORY_SNAPSHOTS = "inventory_snapshots"
 
 
 class ImportStatus(StrEnum):

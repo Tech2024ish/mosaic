@@ -66,6 +66,12 @@ alembic -c backend/alembic.ini upgrade head
 - `docs`: architecture and development documentation.
 - `docker`: container entrypoint scripts.
 
+## Phase 6 master data and inventory
+
+The shared `POST /api/v1/imports` pipeline supports `products`, `warehouses`, `suppliers`, and `inventory_snapshots` in addition to `sales_history`. Master-data APIs are authenticated and tenant-scoped. Product, warehouse, and supplier codes are unique per organization; duplicate rows become validation errors. Inventory snapshots are historical and resolve product and warehouse references within the authenticated organization.
+
+See [docs/data-ingestion.md](docs/data-ingestion.md) for supported CSV formats. Forecasting, optimization, ERP synchronization, and distributed ingestion infrastructure remain deferred.
+
 ## Scope boundary
 
 The foundation does not include forecasting, machine learning, optimization, scenario simulation, recommendations, or ERP capabilities. Those will be added incrementally after the ingestion and operations foundations.

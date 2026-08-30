@@ -8,7 +8,16 @@ from app.core.config import get_settings
 from app.models.base import Base
 
 config = context.config
-config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
+
+
+def configured_database_url() -> str:
+    database_url = get_settings().database_url
+    if database_url is None:
+        raise RuntimeError("Database URL configuration is required for migrations")
+    return database_url
+
+
+config.set_main_option("sqlalchemy.url", configured_database_url().replace("%", "%%"))
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 target_metadata = Base.metadata
@@ -16,7 +25,7 @@ target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=get_settings().database_url, target_metadata=target_metadata, literal_binds=True
+        url=configured_database_url(), target_metadata=target_metadata, literal_binds=True
     )
     with context.begin_transaction():
         context.run_migrations()
