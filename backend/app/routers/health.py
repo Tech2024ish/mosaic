@@ -14,3 +14,12 @@ def health() -> HealthResponse:
     except SQLAlchemyError:
         return HealthResponse(status="degraded", database="unavailable")
     return HealthResponse(status="ok", database="ok")
+
+
+@router.get("/ready", response_model=HealthResponse)
+def ready() -> HealthResponse:
+    try:
+        check_database_connection()
+    except SQLAlchemyError:
+        return HealthResponse(status="not_ready", database="unavailable")
+    return HealthResponse(status="ready", database="ok")

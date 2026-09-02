@@ -57,6 +57,22 @@ class ImportStatsResponse(BaseModel):
     total_rows: int
     successful_rows: int
     failed_rows: int
+    total_processing_attempts: int = 0
+    successful_attempts: int = 0
+    failed_attempts: int = 0
+    average_processing_duration_seconds: float | None = None
+
+
+class ImportAttemptResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    attempt_number: int
+    started_at: datetime
+    finished_at: datetime | None
+    status: ImportStatus
+    failure_category: str | None
+    duration_seconds: float | None
 
 
 class ImportEventResponse(BaseModel):

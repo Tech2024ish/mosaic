@@ -1,6 +1,7 @@
 import logging
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
@@ -13,6 +14,7 @@ from sqlalchemy.orm.session import sessionmaker
 from app.domain.ingestion.audit_policy import ImportEventType
 from app.domain.ingestion.contracts import ValidationIssue
 from app.domain.ingestion.csv_parser import CsvFormatError
+from app.domain.ingestion.failure import FailureCategory, classify_failure
 from app.domain.ingestion.fingerprint import file_fingerprint, row_fingerprint
 from app.domain.ingestion.registry import get_dataset_parser
 from app.domain.ingestion.retry_policy import can_cancel, can_retry
@@ -22,6 +24,7 @@ from app.infrastructure.storage.local import LocalFileStorage
 from app.models.import_error import ImportError
 from app.models.import_event import ImportEvent
 from app.models.import_job import DatasetType, ImportJob, ImportStatus
+from app.models.import_processing_attempt import ImportProcessingAttempt
 from app.models.inventory_snapshot import InventorySnapshot
 from app.models.product import Product
 from app.models.sales_history import SalesHistory
@@ -119,11 +122,50 @@ def record_import_event(
     return event
 
 
+def start_processing_attempt(db: Session, job: ImportJob, started_at: datetime) -> uuid.UUID:
+    latest = db.scalar(
+        select(func.max(ImportProcessingAttempt.attempt_number)).where(
+            ImportProcessingAttempt.import_job_id == job.id
+        )
+    )
+    attempt = ImportProcessingAttempt(
+        import_job_id=job.id,
+        organization_id=job.organization_id,
+        attempt_number=(latest or 0) + 1,
+        started_at=started_at,
+        status=ImportStatus.PROCESSING.value,
+    )
+    db.add(attempt)
+    db.commit()
+    db.refresh(attempt)
+    return attempt.id
+
+
+def finish_processing_attempt(
+    db: Session,
+    attempt_id: uuid.UUID,
+    status: str,
+    finished_at: datetime,
+    failure_category: FailureCategory | None = None,
+    started_at: datetime | None = None,
+) -> None:
+    attempt = db.get(ImportProcessingAttempt, attempt_id)
+    if attempt is None:
+        return
+    attempt.status = status
+    attempt.finished_at = finished_at
+    attempt.failure_category = failure_category.value if failure_category else None
+    if started_at is not None:
+        attempt.duration_seconds = Decimal(str((finished_at - started_at).total_seconds()))
+    db.commit()
+
+
 def process_import_job(
     job_id: uuid.UUID, storage: LocalFileStorage, session_factory: sessionmaker[Session]
 ) -> None:
     db = session_factory()
     job = None
+    attempt_id: uuid.UUID | None = None
     started = datetime.now(UTC)
     try:
         job = db.scalar(select(ImportJob).where(ImportJob.id == job_id))
@@ -143,8 +185,9 @@ def process_import_job(
         db.commit()
         db.refresh(job)
         record_import_event(db, job, ImportEventType.PROCESSING_STARTED)
+        attempt_id = start_processing_attempt(db, job, started)
         if job.dataset_type != DatasetType.SALES_HISTORY.value:
-            _process_master_import(db, job, storage)
+            _process_master_import(db, job, storage, attempt_id)
             return
         parser, required_columns, aliases = get_dataset_parser(job.dataset_type)
         valid_rows = []
@@ -165,6 +208,14 @@ def process_import_job(
                                 "import_id": str(job.id),
                                 "organization_id": str(job.organization_id),
                             },
+                        )
+                        finish_processing_attempt(
+                            db,
+                            attempt_id,
+                            ImportStatus.CANCELLED.value,
+                            datetime.now(UTC),
+                            FailureCategory.CANCELLATION,
+                            started,
                         )
                         return
                     total += 1
@@ -274,6 +325,12 @@ def process_import_job(
         job.status = ImportStatus.COMPLETED.value
         completed_at = datetime.now(UTC)
         job.completed_at = completed_at
+        if attempt_id is not None:
+            attempt = db.get(ImportProcessingAttempt, attempt_id)
+            if attempt is not None:
+                attempt.status = ImportStatus.COMPLETED.value
+                attempt.finished_at = completed_at
+                attempt.duration_seconds = Decimal(str((completed_at - started).total_seconds()))
         db.commit()
         record_import_event(
             db,
@@ -307,8 +364,29 @@ def process_import_job(
                     "message": "Import processing failed",
                 }
                 db.commit()
+                if attempt_id is not None:
+                    finish_processing_attempt(
+                        db,
+                        attempt_id,
+                        ImportStatus.FAILED.value,
+                        datetime.now(UTC),
+                        classify_failure(exc),
+                        started,
+                    )
                 record_import_event(
-                    db, job, ImportEventType.FAILED, metadata={"failure_reason": type(exc).__name__}
+                    db,
+                    job,
+                    ImportEventType.FAILED,
+                    metadata={"failure_category": classify_failure(exc).value},
+                )
+            elif attempt_id is not None:
+                finish_processing_attempt(
+                    db,
+                    attempt_id,
+                    ImportStatus.CANCELLED.value,
+                    datetime.now(UTC),
+                    FailureCategory.CANCELLATION,
+                    started,
                 )
         logger.exception(
             "Import failed", extra={"import_id": str(job_id), "failure_reason": type(exc).__name__}
@@ -317,7 +395,12 @@ def process_import_job(
         db.close()
 
 
-def _process_master_import(db: Session, job: ImportJob, storage: LocalFileStorage) -> None:
+def _process_master_import(
+    db: Session,
+    job: ImportJob,
+    storage: LocalFileStorage,
+    attempt_id: uuid.UUID | None,
+) -> None:
     parser, required_columns, aliases = get_dataset_parser(job.dataset_type)
     valid_rows: list[dict[str, object]] = []
     errors: list[ValidationIssue] = []
@@ -330,6 +413,14 @@ def _process_master_import(db: Session, job: ImportJob, storage: LocalFileStorag
                 and db.scalar(select(ImportJob.status).where(ImportJob.id == job.id))
                 == ImportStatus.CANCELLED.value
             ):
+                if attempt_id is not None:
+                    finish_processing_attempt(
+                        db,
+                        attempt_id,
+                        ImportStatus.CANCELLED.value,
+                        datetime.now(UTC),
+                        FailureCategory.CANCELLATION,
+                    )
                 db.rollback()
                 return
             normalized, issues = normalize_master_row(parsed, job.dataset_type)
@@ -446,6 +537,14 @@ def _process_master_import(db: Session, job: ImportJob, storage: LocalFileStorag
         db.scalar(select(ImportJob.status).where(ImportJob.id == job.id))
         == ImportStatus.CANCELLED.value
     ):
+        if attempt_id is not None:
+            finish_processing_attempt(
+                db,
+                attempt_id,
+                ImportStatus.CANCELLED.value,
+                datetime.now(UTC),
+                FailureCategory.CANCELLATION,
+            )
         db.rollback()
         return
     for issue in errors:
@@ -468,6 +567,11 @@ def _process_master_import(db: Session, job: ImportJob, storage: LocalFileStorag
     }
     job.status = ImportStatus.COMPLETED.value
     job.completed_at = datetime.now(UTC)
+    if attempt_id is not None:
+        attempt = db.get(ImportProcessingAttempt, attempt_id)
+        if attempt is not None:
+            attempt.status = ImportStatus.COMPLETED.value
+            attempt.finished_at = job.completed_at
     db.commit()
     record_import_event(
         db,
@@ -601,7 +705,24 @@ def list_import_events(
     )
 
 
-def import_statistics(db: Session, organization_id: uuid.UUID) -> dict[str, int]:
+def list_import_attempts(
+    db: Session, import_id: uuid.UUID, organization_id: uuid.UUID, offset: int, limit: int
+) -> list[ImportProcessingAttempt]:
+    return list(
+        db.scalars(
+            select(ImportProcessingAttempt)
+            .where(
+                ImportProcessingAttempt.import_job_id == import_id,
+                ImportProcessingAttempt.organization_id == organization_id,
+            )
+            .order_by(ImportProcessingAttempt.attempt_number, ImportProcessingAttempt.id)
+            .offset(offset)
+            .limit(limit)
+        )
+    )
+
+
+def import_statistics(db: Session, organization_id: uuid.UUID) -> dict[str, object]:
     row = db.execute(
         select(
             func.count(ImportJob.id),
@@ -622,6 +743,18 @@ def import_statistics(db: Session, organization_id: uuid.UUID) -> dict[str, int]
             ImportEvent.event_type == ImportEventType.RETRY_REQUESTED.value,
         )
     )
+    attempts = db.execute(
+        select(
+            func.count(ImportProcessingAttempt.id),
+            func.count(ImportProcessingAttempt.id).filter(
+                ImportProcessingAttempt.status == ImportStatus.COMPLETED.value
+            ),
+            func.count(ImportProcessingAttempt.id).filter(
+                ImportProcessingAttempt.status == ImportStatus.FAILED.value
+            ),
+            func.avg(ImportProcessingAttempt.duration_seconds),
+        ).where(ImportProcessingAttempt.organization_id == organization_id)
+    ).one()
     return {
         "total_imports": int(row[0]),
         "successful_imports": int(row[1]),
@@ -632,4 +765,10 @@ def import_statistics(db: Session, organization_id: uuid.UUID) -> dict[str, int]
         "total_rows": int(row[5]),
         "successful_rows": int(row[6]),
         "failed_rows": int(row[7]),
+        "total_processing_attempts": int(attempts[0]),
+        "successful_attempts": int(attempts[1]),
+        "failed_attempts": int(attempts[2]),
+        "average_processing_duration_seconds": (
+            float(attempts[3]) if attempts[3] is not None else None
+        ),
     }

@@ -20,14 +20,17 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.core.config import get_settings
 from app.infrastructure.database.session import SessionLocal, get_db
+from app.infrastructure.queue.executor import BackgroundTasksImportExecutor
 from app.infrastructure.storage.local import FileTooLargeError, LocalFileStorage
 from app.models.import_error import ImportError
 from app.models.import_event import ImportEvent
 from app.models.import_job import ImportJob
+from app.models.import_processing_attempt import ImportProcessingAttempt
 from app.models.user import User
 from app.schemas.imports import (
     CancelResponse,
     DatasetType,
+    ImportAttemptResponse,
     ImportErrorResponse,
     ImportEventResponse,
     ImportJobResponse,
@@ -45,6 +48,7 @@ from app.services.import_service import (
     create_import_job,
     get_import_for_organization,
     import_statistics,
+    list_import_attempts,
     list_import_errors,
     list_import_events,
     list_imports,
@@ -104,14 +108,16 @@ async def upload_import(
         raise HTTPException(
             status_code=409, detail={"message": str(exc), "existing_import_id": exc.existing_job_id}
         ) from exc
-    background_tasks.add_task(process_import_job, job.id, file_storage, SessionLocal)
+    BackgroundTasksImportExecutor(
+        background_tasks, process_import_job, file_storage, SessionLocal
+    ).submit(job.id)
     return job
 
 
 @router.get("/stats", response_model=ImportStatsResponse)
 def get_import_stats(
     db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
-) -> dict[str, int]:
+) -> dict[str, object]:
     return import_statistics(db, current_user.organization_id)
 
 
@@ -206,6 +212,22 @@ def get_import_events(
     return list_import_events(db, import_id, offset, limit)
 
 
+@router.get("/{import_id}/attempts", response_model=list[ImportAttemptResponse])
+def get_import_attempts(
+    import_id: uuid.UUID,
+    offset: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[ImportProcessingAttempt]:
+    get_owned_import(db, import_id, current_user.organization_id)
+    if offset < 0 or limit < 1 or limit > 100:
+        raise HTTPException(
+            status_code=422, detail="offset must be non-negative and limit must be 1-100"
+        )
+    return list_import_attempts(db, import_id, current_user.organization_id, offset, limit)
+
+
 @router.post("/{import_id}/retry", response_model=RetryResponse)
 def retry_import(
     import_id: uuid.UUID,
@@ -221,7 +243,9 @@ def retry_import(
     except ImportNotRetryableError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     file_storage = storage()
-    background_tasks.add_task(process_import_job, job.id, file_storage, SessionLocal)
+    BackgroundTasksImportExecutor(
+        background_tasks, process_import_job, file_storage, SessionLocal
+    ).submit(job.id)
     return RetryResponse(
         import_id=job.id,
         status=ImportStatusSchema(job.status),

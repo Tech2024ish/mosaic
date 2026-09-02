@@ -98,3 +98,9 @@ The first ingestion workflow supports tenant-aware sales-history CSV imports. Se
 Phase 4 adds authenticated import history, detail/error inspection, retry controls for failed jobs, and tenant-scoped ingestion statistics. Distributed queues, Redis, Kafka, Celery, Kubernetes, advanced analytics, ML, forecasting, and optimization remain deferred.
 
 Phase 5 adds cooperative import cancellation, tenant-scoped import activity history, streamed validation-error reports, structured ingestion logs, and lightweight operational metrics through the existing statistics API.
+
+## Phase 7 reliability foundation
+
+Phase 7 adds validated `X-Request-ID` correlation IDs, centralized safe operational logging, processing-attempt telemetry, failure categories, and the protected `GET /api/v1/imports/{import_id}/attempts` endpoint. `/ready` reports database-dependent readiness while `/health` remains available for health checks. Import statistics include attempt totals and average processing duration.
+
+Job submission is behind an internal executor interface. The current adapter uses FastAPI `BackgroundTasks` and is intentionally not durable across restarts. A future durable queue can replace the adapter without changing API contracts or domain logic. Redis, Celery, Kafka, and distributed tracing remain deferred.

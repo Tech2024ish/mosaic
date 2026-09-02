@@ -3,10 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
+from app.core.logging import configure_logging, request_id_middleware
 from app.routers import api, auth, health, imports, master_data
 
 settings = get_settings()
+configure_logging()
 app = FastAPI(title=settings.app_name, debug=settings.debug, version="0.1.0")
+app.middleware("http")(request_id_middleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.backend_cors_origins,

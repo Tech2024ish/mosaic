@@ -1,6 +1,7 @@
 from app.models.import_error import ImportError
 from app.models.import_event import ImportEvent
 from app.models.import_job import DatasetType, ImportJob, ImportStatus
+from app.models.import_processing_attempt import ImportProcessingAttempt
 from app.models.inventory_snapshot import InventorySnapshot
 from app.models.organization import Organization
 from app.models.product import Product
@@ -15,6 +16,7 @@ __all__ = [
     "DatasetType",
     "ImportError",
     "ImportEvent",
+    "ImportProcessingAttempt",
     "InventorySnapshot",
     "ImportJob",
     "ImportStatus",

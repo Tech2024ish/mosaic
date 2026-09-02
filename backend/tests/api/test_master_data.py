@@ -139,6 +139,10 @@ def test_master_dataset_csv_import_uses_shared_pipeline() -> None:
     assert job["total_rows"] == 2
     assert job["successful_rows"] == 1
     assert job["failed_rows"] == 1
+    attempts = client.get(f"/api/v1/imports/{job['id']}/attempts", headers=headers)
+    assert attempts.status_code == 200
+    assert attempts.json()[0]["attempt_number"] == 1
+    assert attempts.json()[0]["status"] == "completed"
     assert client.get("/api/v1/products", headers=headers).json()[0]["product_code"] == "P-CSV"
     errors = client.get(f"/api/v1/imports/{job['id']}/errors", headers=headers)
     assert errors.status_code == 200

@@ -66,3 +66,6 @@ class ImportJob(TimestampedModel):
     )
     sales_records = relationship("SalesHistory", back_populates="import_job")
     events = relationship("ImportEvent", back_populates="import_job", cascade="all, delete-orphan")
+    processing_attempts = relationship(
+        "ImportProcessingAttempt", back_populates="import_job", cascade="all, delete-orphan"
+    )

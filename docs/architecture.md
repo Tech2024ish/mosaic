@@ -44,6 +44,14 @@ Master data uses the same modular-monolith ingestion boundary as sales history. 
 
 The Phase 6 migration is `0006_master_data`; no distributed queue or analytics infrastructure is introduced.
 
+## Phase 7 reliability and observability
+
+Every request receives a validated `X-Request-ID`; invalid or oversized client values are replaced with a UUID. The ID is available through a context variable and returned in the response. Standard-library logging is configured centrally with safe JSON operational fields and excludes credentials, tokens, authorization headers, uploaded content, and secrets.
+
+Import execution is submitted through the `ImportJobExecutor` boundary. The production adapter remains an in-process FastAPI `BackgroundTasks` adapter. Each processing run creates an organization-scoped `ImportProcessingAttempt` with ordinal number, timestamps, status, duration, and safe failure category. Operational queries filter by authenticated organization.
+
+`/health` checks health/database status and `/ready` expresses request-serving readiness based on database connectivity. Database-backed attempt statistics are returned through the existing authenticated import statistics API; no global tenant data or external metrics service is exposed.
+
 ## Phase 5 ingestion operations
 
 Import administration remains tenant-scoped and uses the existing database and in-process `BackgroundTasks` worker. Failed jobs can be retried using the existing file and row fingerprints. Pending and processing jobs can be cooperatively cancelled; the processor checks the database between rows and uses a conditional completion update so a cancellation cannot be overwritten by a late completion.

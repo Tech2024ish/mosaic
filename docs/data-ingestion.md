@@ -55,6 +55,12 @@ Master-data APIs are `GET/POST /api/v1/products`, `GET/PATCH /api/v1/products/{i
 
 The frontend provides dataset selection during upload and a tenant-scoped reference-data browser. Processing remains in-process and cooperative, so jobs are not durable across process restarts.
 
+## Phase 7 reliability
+
+Processing attempts are persisted in `import_processing_attempts`. Every processing run, including retries, records its ordinal number, timestamps, final status, duration, and safe failure category. `GET /api/v1/imports/{import_id}/attempts` is authenticated, paginated, deterministically ordered, and tenant-scoped. Import statistics include attempt totals and average duration.
+
+Uploads continue through the internal executor boundary using FastAPI `BackgroundTasks`. This keeps local deployment simple while allowing a future durable worker adapter without changing the import API or domain logic. `X-Request-ID` is generated or safely propagated on every request and included in operational logs. `/ready` verifies the database dependency.
+
 ## Phase 5 administration and auditability
 
 Import operations are available only to authenticated users and remain scoped to the user's organization. `POST /api/v1/imports/{import_id}/cancel` cooperatively cancels pending or processing imports. A processor checks for cancellation between rows and uses a conditional completion update; it is not forcibly terminated. Completed, failed, and already-cancelled imports cannot be cancelled.
