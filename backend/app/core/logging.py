@@ -20,11 +20,12 @@ def get_request_id() -> str | None:
 
 
 def configure_logging() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(message)s",
-        force=False,
-    )
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    if not root.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(OperationalFormatter())
+        root.addHandler(handler)
 
 
 class OperationalFormatter(logging.Formatter):
