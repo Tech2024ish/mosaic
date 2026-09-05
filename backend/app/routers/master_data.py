@@ -49,11 +49,22 @@ def missing() -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
 
 
+def pagination(offset: int, limit: int) -> tuple[int, int]:
+    if offset < 0 or limit < 1 or limit > 100:
+        raise HTTPException(
+            status_code=422, detail="offset must be non-negative and limit must be 1-100"
+        )
+    return offset, limit
+
+
 @router.get("/products", response_model=list[ProductResponse])
 def products(
-    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+    offset: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> list[Product]:
-    return list_products(db, user.organization_id)
+    return list_products(db, user.organization_id, *pagination(offset, limit))
 
 
 @router.post("/products", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
@@ -94,9 +105,12 @@ def product_update(
 
 @router.get("/warehouses", response_model=list[WarehouseResponse])
 def warehouses(
-    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+    offset: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> list[Warehouse]:
-    return list_warehouses(db, user.organization_id)
+    return list_warehouses(db, user.organization_id, *pagination(offset, limit))
 
 
 @router.post("/warehouses", response_model=WarehouseResponse, status_code=status.HTTP_201_CREATED)
@@ -137,9 +151,12 @@ def warehouse_update(
 
 @router.get("/suppliers", response_model=list[SupplierResponse])
 def suppliers(
-    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+    offset: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> list[Supplier]:
-    return list_suppliers(db, user.organization_id)
+    return list_suppliers(db, user.organization_id, *pagination(offset, limit))
 
 
 @router.post("/suppliers", response_model=SupplierResponse, status_code=status.HTTP_201_CREATED)
@@ -180,9 +197,12 @@ def supplier_update(
 
 @router.get("/inventory", response_model=list[InventoryResponse])
 def inventory(
-    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+    offset: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> list[InventorySnapshot]:
-    return list_inventory(db, user.organization_id)
+    return list_inventory(db, user.organization_id, *pagination(offset, limit))
 
 
 @router.post("/inventory", response_model=InventoryResponse, status_code=status.HTTP_201_CREATED)

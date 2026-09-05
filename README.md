@@ -104,3 +104,9 @@ Phase 5 adds cooperative import cancellation, tenant-scoped import activity hist
 Phase 7 adds validated `X-Request-ID` correlation IDs, centralized safe operational logging, processing-attempt telemetry, failure categories, and the protected `GET /api/v1/imports/{import_id}/attempts` endpoint. `/ready` reports database-dependent readiness while `/health` remains available for health checks. Import statistics include attempt totals and average processing duration.
 
 Job submission is behind an internal executor interface. The current adapter uses FastAPI `BackgroundTasks` and is intentionally not durable across restarts. A future durable queue can replace the adapter without changing API contracts or domain logic. Redis, Celery, Kafka, and distributed tracing remain deferred.
+
+## Phase 8 performance and production hardening
+
+Tenant-owned master-data list endpoints use database-side `offset`/`limit` pagination with a maximum page size of 100. Database pool sizing is configurable through `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, and `DB_POOL_TIMEOUT_SECONDS`; SQLite test runs do not receive PostgreSQL-only pool arguments. Request responses expose application duration through `Server-Timing`, while `X-Request-ID` remains the diagnostic correlation identifier.
+
+The application remains a modular monolith. No cache, distributed queue, microservice, or external observability platform was added. Import processing remains streaming at file-read level and uses the existing transaction/state-transition protections; very large valid-row/error batches remain a future optimization boundary.

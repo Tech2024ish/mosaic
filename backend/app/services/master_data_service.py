@@ -25,12 +25,16 @@ def _commit[RecordT](db: Session, item: RecordT) -> RecordT:
     return item
 
 
-def list_products(db: Session, organization_id: uuid.UUID) -> list[Product]:
+def list_products(
+    db: Session, organization_id: uuid.UUID, offset: int, limit: int
+) -> list[Product]:
     return list(
         db.scalars(
             select(Product)
             .where(Product.organization_id == organization_id)
             .order_by(Product.product_code)
+            .offset(offset)
+            .limit(limit)
         )
     )
 
@@ -52,12 +56,16 @@ def update_product(db: Session, product: Product, data: dict[str, object]) -> Pr
     return _commit(db, product)
 
 
-def list_warehouses(db: Session, organization_id: uuid.UUID) -> list[Warehouse]:
+def list_warehouses(
+    db: Session, organization_id: uuid.UUID, offset: int, limit: int
+) -> list[Warehouse]:
     return list(
         db.scalars(
             select(Warehouse)
             .where(Warehouse.organization_id == organization_id)
             .order_by(Warehouse.warehouse_code)
+            .offset(offset)
+            .limit(limit)
         )
     )
 
@@ -83,12 +91,16 @@ def update_warehouse(db: Session, warehouse: Warehouse, data: dict[str, object])
     return _commit(db, warehouse)
 
 
-def list_suppliers(db: Session, organization_id: uuid.UUID) -> list[Supplier]:
+def list_suppliers(
+    db: Session, organization_id: uuid.UUID, offset: int, limit: int
+) -> list[Supplier]:
     return list(
         db.scalars(
             select(Supplier)
             .where(Supplier.organization_id == organization_id)
             .order_by(Supplier.supplier_code)
+            .offset(offset)
+            .limit(limit)
         )
     )
 
@@ -114,12 +126,16 @@ def update_supplier(db: Session, supplier: Supplier, data: dict[str, object]) ->
     return _commit(db, supplier)
 
 
-def list_inventory(db: Session, organization_id: uuid.UUID) -> list[InventorySnapshot]:
+def list_inventory(
+    db: Session, organization_id: uuid.UUID, offset: int, limit: int
+) -> list[InventorySnapshot]:
     return list(
         db.scalars(
             select(InventorySnapshot)
             .where(InventorySnapshot.organization_id == organization_id)
             .order_by(InventorySnapshot.snapshot_date.desc(), InventorySnapshot.id)
+            .offset(offset)
+            .limit(limit)
         )
     )
 

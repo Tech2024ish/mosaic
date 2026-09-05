@@ -4,6 +4,7 @@ import logging
 import re
 import uuid
 from collections.abc import Awaitable, Callable
+from time import perf_counter
 from typing import Any
 
 from fastapi import Request, Response
@@ -69,9 +70,11 @@ async def request_id_middleware(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
     request_id = valid_request_id(request.headers.get(REQUEST_ID_HEADER))
+    started = perf_counter()
     token = request_id_context.set(request_id)
     try:
         response = await call_next(request)
+        response.headers["Server-Timing"] = f"app;dur={(perf_counter() - started) * 1000:.2f}"
         response.headers[REQUEST_ID_HEADER] = request_id
         return response
     finally:

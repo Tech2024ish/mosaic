@@ -39,6 +39,7 @@ def test_master_data_crud_is_tenant_scoped() -> None:
         == 409
     )
     assert client.get("/api/v1/products", headers=second_headers).json() == []
+    assert client.get("/api/v1/products?limit=101", headers=first_headers).status_code == 422
     assert (
         client.get(f"/api/v1/products/{product_body['id']}", headers=second_headers).status_code
         == 404

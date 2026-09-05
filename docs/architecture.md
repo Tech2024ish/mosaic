@@ -52,6 +52,14 @@ Import execution is submitted through the `ImportJobExecutor` boundary. The prod
 
 `/health` checks health/database status and `/ready` expresses request-serving readiness based on database connectivity. Database-backed attempt statistics are returned through the existing authenticated import statistics API; no global tenant data or external metrics service is exposed.
 
+## Phase 8 performance and scalability
+
+Large master-data reads are bounded by tenant-scoped database pagination (`offset` default 0, `limit` default 50, maximum 100). Existing composite tenant/code, tenant/date, and import-operation indexes support the principal access paths; no speculative indexes were added. Statistics continue to aggregate in PostgreSQL, and validation reports remain streamed.
+
+Database pool settings are configuration-driven for PostgreSQL and omitted for SQLite test engines. Request duration is surfaced as a lightweight `Server-Timing` response header and request IDs remain available to structured logs. The current import processor avoids holding request sessions during background work and retains conditional state transitions for retry, cancellation, and completion races.
+
+Caching is intentionally unchanged: authentication/session decisions and tenant data are not cached. A future durable queue or bounded cache can be introduced behind the existing infrastructure boundaries if operational load proves it necessary; Redis, Celery, Kafka, Kubernetes, and microservices are not part of this phase.
+
 ## Phase 5 ingestion operations
 
 Import administration remains tenant-scoped and uses the existing database and in-process `BackgroundTasks` worker. Failed jobs can be retried using the existing file and row fingerprints. Pending and processing jobs can be cooperatively cancelled; the processor checks the database between rows and uses a conditional completion update so a cancellation cannot be overwritten by a late completion.

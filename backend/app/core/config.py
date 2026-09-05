@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     storage_root: str = ".mosaic-storage"
     max_upload_size_bytes: int = 25_000_000
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_pool_timeout_seconds: int = 30
     backend_cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
 
     model_config = SettingsConfigDict(
