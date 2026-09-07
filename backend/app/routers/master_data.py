@@ -10,6 +10,7 @@ from app.models.product import Product
 from app.models.supplier import Supplier
 from app.models.user import User
 from app.models.warehouse import Warehouse
+from app.schemas.business_data import BusinessQuery, InventoryQuery
 from app.schemas.master_data import (
     InventoryCreate,
     InventoryResponse,
@@ -49,22 +50,29 @@ def missing() -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
 
 
-def pagination(offset: int, limit: int) -> tuple[int, int]:
-    if offset < 0 or limit < 1 or limit > 100:
+def validate_sort(value: str, allowed: set[str]) -> str:
+    if value not in allowed:
         raise HTTPException(
-            status_code=422, detail="offset must be non-negative and limit must be 1-100"
+            status_code=422, detail=f"sort must be one of: {', '.join(sorted(allowed))}"
         )
-    return offset, limit
+    return value
 
 
 @router.get("/products", response_model=list[ProductResponse])
 def products(
-    offset: int = 0,
-    limit: int = 50,
+    query: BusinessQuery = Depends(),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[Product]:
-    return list_products(db, user.organization_id, *pagination(offset, limit))
+    return list_products(
+        db,
+        user.organization_id,
+        query.offset,
+        query.limit,
+        query.search,
+        validate_sort(query.sort, {"code", "name", "created_at"}),
+        query.order == "desc",
+    )
 
 
 @router.post("/products", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
@@ -105,12 +113,19 @@ def product_update(
 
 @router.get("/warehouses", response_model=list[WarehouseResponse])
 def warehouses(
-    offset: int = 0,
-    limit: int = 50,
+    query: BusinessQuery = Depends(),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[Warehouse]:
-    return list_warehouses(db, user.organization_id, *pagination(offset, limit))
+    return list_warehouses(
+        db,
+        user.organization_id,
+        query.offset,
+        query.limit,
+        query.search,
+        validate_sort(query.sort, {"code", "name", "created_at"}),
+        query.order == "desc",
+    )
 
 
 @router.post("/warehouses", response_model=WarehouseResponse, status_code=status.HTTP_201_CREATED)
@@ -151,12 +166,19 @@ def warehouse_update(
 
 @router.get("/suppliers", response_model=list[SupplierResponse])
 def suppliers(
-    offset: int = 0,
-    limit: int = 50,
+    query: BusinessQuery = Depends(),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[Supplier]:
-    return list_suppliers(db, user.organization_id, *pagination(offset, limit))
+    return list_suppliers(
+        db,
+        user.organization_id,
+        query.offset,
+        query.limit,
+        query.search,
+        validate_sort(query.sort, {"code", "name", "created_at"}),
+        query.order == "desc",
+    )
 
 
 @router.post("/suppliers", response_model=SupplierResponse, status_code=status.HTTP_201_CREATED)
@@ -197,12 +219,30 @@ def supplier_update(
 
 @router.get("/inventory", response_model=list[InventoryResponse])
 def inventory(
-    offset: int = 0,
-    limit: int = 50,
+    query: InventoryQuery = Depends(),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[InventorySnapshot]:
-    return list_inventory(db, user.organization_id, *pagination(offset, limit))
+    if (
+        query.snapshot_date_from
+        and query.snapshot_date_to
+        and query.snapshot_date_from > query.snapshot_date_to
+    ):
+        raise HTTPException(
+            status_code=422, detail="snapshot_date_from must not be after snapshot_date_to"
+        )
+    return list_inventory(
+        db,
+        user.organization_id,
+        query.offset,
+        query.limit,
+        query.product_id,
+        query.warehouse_id,
+        query.snapshot_date_from,
+        query.snapshot_date_to,
+        validate_sort(query.sort, {"snapshot_date", "created_at", "quantity"}),
+        query.order == "desc",
+    )
 
 
 @router.post("/inventory", response_model=InventoryResponse, status_code=status.HTTP_201_CREATED)

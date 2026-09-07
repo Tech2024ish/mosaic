@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -26,17 +26,28 @@ def _commit[RecordT](db: Session, item: RecordT) -> RecordT:
 
 
 def list_products(
-    db: Session, organization_id: uuid.UUID, offset: int, limit: int
+    db: Session,
+    organization_id: uuid.UUID,
+    offset: int,
+    limit: int,
+    search: str | None = None,
+    sort: str = "code",
+    descending: bool = False,
 ) -> list[Product]:
-    return list(
-        db.scalars(
-            select(Product)
-            .where(Product.organization_id == organization_id)
-            .order_by(Product.product_code)
-            .offset(offset)
-            .limit(limit)
-        )
+    sort_columns = {
+        "code": Product.product_code,
+        "name": Product.name,
+        "created_at": Product.created_at,
+    }
+    column = sort_columns[sort]
+    statement: Select[tuple[Product]] = select(Product).where(
+        Product.organization_id == organization_id
     )
+    if search:
+        term = f"%{search.strip()}%"
+        statement = statement.where(Product.product_code.ilike(term) | Product.name.ilike(term))
+    statement = statement.order_by(column.desc() if descending else column, Product.id)
+    return list(db.scalars(statement.offset(offset).limit(limit)))
 
 
 def get_product(db: Session, organization_id: uuid.UUID, product_id: uuid.UUID) -> Product | None:
@@ -57,17 +68,32 @@ def update_product(db: Session, product: Product, data: dict[str, object]) -> Pr
 
 
 def list_warehouses(
-    db: Session, organization_id: uuid.UUID, offset: int, limit: int
+    db: Session,
+    organization_id: uuid.UUID,
+    offset: int,
+    limit: int,
+    search: str | None = None,
+    sort: str = "code",
+    descending: bool = False,
 ) -> list[Warehouse]:
-    return list(
-        db.scalars(
-            select(Warehouse)
-            .where(Warehouse.organization_id == organization_id)
-            .order_by(Warehouse.warehouse_code)
-            .offset(offset)
-            .limit(limit)
-        )
+    sort_columns = {
+        "code": Warehouse.warehouse_code,
+        "name": Warehouse.name,
+        "created_at": Warehouse.created_at,
+    }
+    column = sort_columns[sort]
+    statement: Select[tuple[Warehouse]] = select(Warehouse).where(
+        Warehouse.organization_id == organization_id
     )
+    if search:
+        term = f"%{search.strip()}%"
+        statement = statement.where(
+            Warehouse.warehouse_code.ilike(term)
+            | Warehouse.name.ilike(term)
+            | Warehouse.location.ilike(term)
+        )
+    statement = statement.order_by(column.desc() if descending else column, Warehouse.id)
+    return list(db.scalars(statement.offset(offset).limit(limit)))
 
 
 def get_warehouse(
@@ -92,17 +118,28 @@ def update_warehouse(db: Session, warehouse: Warehouse, data: dict[str, object])
 
 
 def list_suppliers(
-    db: Session, organization_id: uuid.UUID, offset: int, limit: int
+    db: Session,
+    organization_id: uuid.UUID,
+    offset: int,
+    limit: int,
+    search: str | None = None,
+    sort: str = "code",
+    descending: bool = False,
 ) -> list[Supplier]:
-    return list(
-        db.scalars(
-            select(Supplier)
-            .where(Supplier.organization_id == organization_id)
-            .order_by(Supplier.supplier_code)
-            .offset(offset)
-            .limit(limit)
-        )
+    sort_columns = {
+        "code": Supplier.supplier_code,
+        "name": Supplier.name,
+        "created_at": Supplier.created_at,
+    }
+    column = sort_columns[sort]
+    statement: Select[tuple[Supplier]] = select(Supplier).where(
+        Supplier.organization_id == organization_id
     )
+    if search:
+        term = f"%{search.strip()}%"
+        statement = statement.where(Supplier.supplier_code.ilike(term) | Supplier.name.ilike(term))
+    statement = statement.order_by(column.desc() if descending else column, Supplier.id)
+    return list(db.scalars(statement.offset(offset).limit(limit)))
 
 
 def get_supplier(
@@ -127,17 +164,36 @@ def update_supplier(db: Session, supplier: Supplier, data: dict[str, object]) ->
 
 
 def list_inventory(
-    db: Session, organization_id: uuid.UUID, offset: int, limit: int
+    db: Session,
+    organization_id: uuid.UUID,
+    offset: int,
+    limit: int,
+    product_id: uuid.UUID | None = None,
+    warehouse_id: uuid.UUID | None = None,
+    snapshot_date_from: object | None = None,
+    snapshot_date_to: object | None = None,
+    sort: str = "snapshot_date",
+    descending: bool = True,
 ) -> list[InventorySnapshot]:
-    return list(
-        db.scalars(
-            select(InventorySnapshot)
-            .where(InventorySnapshot.organization_id == organization_id)
-            .order_by(InventorySnapshot.snapshot_date.desc(), InventorySnapshot.id)
-            .offset(offset)
-            .limit(limit)
-        )
+    sort_columns = {
+        "snapshot_date": InventorySnapshot.snapshot_date,
+        "created_at": InventorySnapshot.created_at,
+        "quantity": InventorySnapshot.quantity_on_hand,
+    }
+    column = sort_columns[sort]
+    statement: Select[tuple[InventorySnapshot]] = select(InventorySnapshot).where(
+        InventorySnapshot.organization_id == organization_id
     )
+    if product_id is not None:
+        statement = statement.where(InventorySnapshot.product_id == product_id)
+    if warehouse_id is not None:
+        statement = statement.where(InventorySnapshot.warehouse_id == warehouse_id)
+    if snapshot_date_from is not None:
+        statement = statement.where(InventorySnapshot.snapshot_date >= snapshot_date_from)
+    if snapshot_date_to is not None:
+        statement = statement.where(InventorySnapshot.snapshot_date <= snapshot_date_to)
+    statement = statement.order_by(column.desc() if descending else column, InventorySnapshot.id)
+    return list(db.scalars(statement.offset(offset).limit(limit)))
 
 
 def get_inventory(

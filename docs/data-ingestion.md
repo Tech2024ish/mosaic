@@ -61,6 +61,16 @@ Processing attempts are persisted in `import_processing_attempts`. Every process
 
 Uploads continue through the internal executor boundary using FastAPI `BackgroundTasks`. This keeps local deployment simple while allowing a future durable worker adapter without changing the import API or domain logic. `X-Request-ID` is generated or safely propagated on every request and included in operational logs. `/ready` verifies the database dependency.
 
+## Phase 9 business-data queries
+
+Authenticated read APIs expose the canonical business data without bypassing ingestion ownership:
+
+- `GET /api/v1/products`, `/warehouses`, `/suppliers`, and `/inventory` support `offset`, `limit`, `search` where meaningful, and whitelisted sorting.
+- `GET /api/v1/sales` supports `product_code`, `warehouse_code`, `sale_date_from`, `sale_date_to`, bounded pagination, and whitelisted sorting.
+- Detail routes remain tenant-scoped and return `404` for another organization's resource.
+
+List limits default to 50 and never exceed 100. Filtering, sorting, and pagination execute in SQLAlchemy/PostgreSQL before response serialization. No client-provided organization identifier participates in authorization. Phase 9 added no migration or speculative indexes; existing tenant/date and tenant/code indexes remain the primary query support.
+
 ## Phase 5 administration and auditability
 
 Import operations are available only to authenticated users and remain scoped to the user's organization. `POST /api/v1/imports/{import_id}/cancel` cooperatively cancels pending or processing imports. A processor checks for cancellation between rows and uses a conditional completion update; it is not forcibly terminated. Completed, failed, and already-cancelled imports cannot be cancelled.

@@ -60,6 +60,12 @@ Database pool settings are configuration-driven for PostgreSQL and omitted for S
 
 Caching is intentionally unchanged: authentication/session decisions and tenant data are not cached. A future durable queue or bounded cache can be introduced behind the existing infrastructure boundaries if operational load proves it necessary; Redis, Celery, Kafka, Kubernetes, and microservices are not part of this phase.
 
+## Phase 9 business data API
+
+Business-data retrieval follows the existing `router → schema → service → SQLAlchemy` flow. Products, warehouses, suppliers, and inventory reuse their tenant-safe services and now apply filtering, whitelisted sorting, and database-side pagination. Sales history has a dedicated read service/router using the existing `SalesHistory` model; it filters by the authenticated organization before applying product, warehouse, date, sort, and limit expressions. No schema migration was needed because Phase 1–8 models and indexes already support these access paths.
+
+The frontend uses the authenticated API client and displays bounded result sets. Client parameters cannot select an organization or inject SQL/order expressions. Cross-tenant resource reads continue to resolve as not found through organization-scoped queries.
+
 ## Phase 5 ingestion operations
 
 Import administration remains tenant-scoped and uses the existing database and in-process `BackgroundTasks` worker. Failed jobs can be retried using the existing file and row fingerprints. Pending and processing jobs can be cooperatively cancelled; the processor checks the database between rows and uses a conditional completion update so a cancellation cannot be overwritten by a late completion.
