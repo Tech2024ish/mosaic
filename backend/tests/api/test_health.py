@@ -34,6 +34,23 @@ def test_safe_request_id_is_propagated_and_invalid_values_are_replaced() -> None
     assert len(invalid.headers["X-Request-ID"]) == 36
 
 
+def test_request_id_is_available_through_cors() -> None:
+    client = TestClient(app)
+    preflight = client.options(
+        "/api/v1",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "X-Request-ID",
+        },
+    )
+    assert preflight.status_code == 200
+    assert "X-Request-ID" in preflight.headers["access-control-allow-headers"]
+    response = client.get("/api/v1", headers={"Origin": "http://localhost:5173"})
+    assert response.status_code == 200
+    assert "X-Request-ID" in response.headers["access-control-expose-headers"]
+
+
 def test_readiness_reports_database_status(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(health, "check_database_connection", lambda: True)
     response = TestClient(app).get("/ready")

@@ -1,5 +1,13 @@
 # MOSAIC architecture
 
+## Phase 0 baseline
+
+Phase 0 is the maintainability and safety baseline for the implemented platform, not a second application foundation. Configuration is centralized in Pydantic Settings and loaded from environment variables. Production configuration rejects debug mode and development-only signing keys, while database pool, upload, CORS, storage, and token settings remain explicit.
+
+The backend keeps request-scoped SQLAlchemy sessions short-lived and gives background processing its own sessions. Tenant-owned reads continue to derive organization context from the authenticated user and apply it in the database query. The API returns safe generic unexpected-error messages while logging a structured event with the request correlation ID; it does not log credentials, tokens, authorization headers, or uploaded content.
+
+The request middleware validates or generates `X-Request-ID`, returns it on every response, and exposes it through CORS along with `Server-Timing`. The React client reads its API origin from `VITE_API_URL` with a localhost development default. These are baseline operational controls; they do not change authentication, tenant authorization, or the migration model.
+
 ## Product boundary
 
 MOSAIC is a decision layer above operational systems. Its first customer profile is a multi-warehouse, multi-supplier African distributor. The foundation deliberately stops before forecasting, optimization, scenarios, and recommendations.
@@ -65,6 +73,14 @@ Caching is intentionally unchanged: authentication/session decisions and tenant 
 Business-data retrieval follows the existing `router → schema → service → SQLAlchemy` flow. Products, warehouses, suppliers, and inventory reuse their tenant-safe services and now apply filtering, whitelisted sorting, and database-side pagination. Sales history has a dedicated read service/router using the existing `SalesHistory` model; it filters by the authenticated organization before applying product, warehouse, date, sort, and limit expressions. No schema migration was needed because Phase 1–8 models and indexes already support these access paths.
 
 The frontend uses the authenticated API client and displays bounded result sets. Client parameters cannot select an organization or inject SQL/order expressions. Cross-tenant resource reads continue to resolve as not found through organization-scoped queries.
+
+## Phase 10 analytics and reporting
+
+Analytics is a retrieval/aggregation layer above the existing business-data services. `app.routers.analytics` remains thin and delegates to `app.services.analytics_service`, which applies the authenticated organization predicate before database-side `COUNT`, `SUM`, `AVG`, `GROUP BY`, `ORDER BY`, and `LIMIT` operations. The service exposes summary metrics, filtered sales totals, day/week/month trends, top products, warehouse performance, and inventory totals.
+
+The sales model stores product and warehouse business codes rather than foreign keys, so product and warehouse rankings use tenant-scoped outer joins for display names and retain the source codes when master data is absent. Current inventory in the summary is the latest snapshot per organization/product/warehouse; the dedicated inventory endpoint reports the selected historical snapshot rows. No low-stock metric is fabricated because the current schema has no threshold policy.
+
+Analytics query parameters are bounded and explicit: dates are validated, trend periods are restricted to `day`, `week`, or `month`, and ranking limits are capped at 100. PostgreSQL uses `date_trunc`; SQLite's test database uses an equivalent `strftime` expression. No migration was required because the existing Phase 1–8 tables and indexes support these aggregations. Analytics responses are always tenant-scoped through `current_user.organization_id`.
 
 ## Phase 5 ingestion operations
 

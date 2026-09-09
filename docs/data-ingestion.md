@@ -71,6 +71,12 @@ Authenticated read APIs expose the canonical business data without bypassing ing
 
 List limits default to 50 and never exceed 100. Filtering, sorting, and pagination execute in SQLAlchemy/PostgreSQL before response serialization. No client-provided organization identifier participates in authorization. Phase 9 added no migration or speculative indexes; existing tenant/date and tenant/code indexes remain the primary query support.
 
+## Phase 10 analytics
+
+The analytics API aggregates persisted sales and master data rather than duplicating the Phase 9 exploration endpoints. Authenticated endpoints include `/api/v1/analytics/summary`, `/sales`, `/sales/trend`, `/products/top`, `/warehouses/performance`, and `/inventory`. Sales filters accept `date_from`, `date_to`, `product_code`, and `warehouse_code`; trend grouping accepts only `day`, `week`, or `month`; ranking limits are bounded from 1 to 100.
+
+Aggregations execute in the database. Revenue is `quantity * unit_price`, and product/warehouse rankings group by the existing sales business codes. Summary inventory represents the latest snapshot for each product/warehouse pair, while inventory analytics can inspect historical rows within a date range. All queries apply the authenticated organization ID before aggregation, so aggregates cannot combine tenants. The frontend displays summary cards, a monthly trend, top products, and warehouse rankings. Forecasting, low-stock rules, supplier scoring, and optimization are not part of this phase.
+
 ## Phase 5 administration and auditability
 
 Import operations are available only to authenticated users and remain scoped to the user's organization. `POST /api/v1/imports/{import_id}/cancel` cooperatively cancels pending or processing imports. A processor checks for cancellation between rows and uses a conditional completion update; it is not forcibly terminated. Completed, failed, and already-cancelled imports cannot be cancelled.

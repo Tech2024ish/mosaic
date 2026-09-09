@@ -42,6 +42,17 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def build_database_url(self) -> "Settings":
+        if self.access_token_expire_minutes < 1:
+            raise ValueError("access_token_expire_minutes must be positive")
+        if self.max_upload_size_bytes < 1:
+            raise ValueError("max_upload_size_bytes must be positive")
+        if self.db_pool_size < 1 or self.db_max_overflow < 0 or self.db_pool_timeout_seconds < 1:
+            raise ValueError("database pool settings are invalid")
+        if self.environment.lower() in {"production", "prod"}:
+            if self.debug:
+                raise ValueError("debug must be disabled in production")
+            if len(self.secret_key) < 32 or self.secret_key.startswith("development-only"):
+                raise ValueError("a strong production secret_key is required")
         if self.database_url is None:
             encoded_password = quote_plus(self.db_password)
             self.database_url = (

@@ -21,6 +21,9 @@ nav { display: flex; gap: 30px; margin-right: auto; color: #61716b; font-size: .
 .stats-grid span, .history-row small { color: #68766e; font-size: .78rem; }
 .history-list { display: grid; gap: 8px; }
 .history-row { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 18px; padding: 16px 0; border-top: 1px solid #e5e9e3; }
+.trend-row { grid-template-columns: 130px 1fr auto; }
+.trend-bar { height: 9px; overflow: hidden; border-radius: 99px; background: #e7eee7; }
+.trend-bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #0a5a38, #faba00); }
 .history-row strong, .history-row small { display: block; }
 .history-row small { margin-top: 4px; text-transform: capitalize; }
 .text-link { border: 0; background: none; color: #07552f; cursor: pointer; font: inherit; font-weight: 700; }
@@ -30,4 +33,4 @@ nav { display: flex; gap: 30px; margin-right: auto; color: #61716b; font-size: .
 .operation-actions { display: grid; gap: 12px; margin-top: 16px; }
 .event-list { display: grid; gap: 6px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #e5e9e3; }
 .event-list small { color: #68766e; text-transform: capitalize; }
-@media (max-width: 700px) { .operations-section { margin: 0 18px 64px; padding: 22px; } .stats-grid { grid-template-columns: 1fr; } .history-row { grid-template-columns: 1fr auto; gap: 10px; } }
+@media (max-width: 700px) { .operations-section { margin: 0 18px 64px; padding: 22px; } .stats-grid { grid-template-columns: 1fr; } .history-row, .trend-row { grid-template-columns: 1fr auto; gap: 10px; } .trend-bar { grid-column: 1 / -1; grid-row: 2; } }

@@ -53,6 +53,30 @@ mypy backend/app
 alembic -c backend/alembic.ini upgrade head
 ```
 
+For local frontend development, copy `frontend/.env.example` to `frontend/.env` when the API is not running at `http://localhost:8000`. The frontend reads `VITE_API_URL` at build time; it never embeds credentials, tokens, or tenant identifiers.
+
+## Phase 0 baseline
+
+The repository baseline is a modular monolith with centralized environment configuration, explicit SQLAlchemy session lifetimes, migration-managed PostgreSQL schema, authenticated tenant-scoped queries, safe API error handling, request correlation, and typed frontend API configuration. Production settings reject debug mode and development-only signing keys. `X-Request-ID` and `Server-Timing` are exposed to browser clients for operational diagnosis without exposing secrets.
+
+Run the complete backend checks from the repository root:
+
+```powershell
+py -m pytest
+py -m ruff check .
+py -m ruff format --check .
+py -m mypy .
+```
+
+Run migration and frontend checks from their respective directories:
+
+```powershell
+cd backend
+py -m alembic current
+cd ..\frontend
+npm run build
+```
+
 ## Repository layout
 
 - `backend/app/core`: settings, security, and shared application concerns.
@@ -114,3 +138,16 @@ The application remains a modular monolith. No cache, distributed queue, microse
 ## Phase 9 business data API
 
 Authenticated users can explore tenant-scoped products, warehouses, suppliers, inventory snapshots, and sales history. Master-data endpoints support `search`, whitelisted `sort`/`order`, and bounded `offset`/`limit` pagination. Sales history is available through `GET /api/v1/sales` with product, warehouse, date-range, sorting, and pagination filters. The frontend business-data panel uses these APIs without loading unbounded datasets.
+
+## Phase 10 analytics and reporting
+
+Analytics endpoints aggregate existing tenant-owned data in PostgreSQL:
+
+- `GET /api/v1/analytics/summary` returns sales, revenue, average sale, master-data counts, and latest inventory totals.
+- `GET /api/v1/analytics/sales` returns filtered sales totals for an optional date range, product, or warehouse.
+- `GET /api/v1/analytics/sales/trend?period=day|week|month` returns database-grouped sales time series.
+- `GET /api/v1/analytics/products/top?limit=10` ranks products by revenue.
+- `GET /api/v1/analytics/warehouses/performance?limit=10` ranks warehouses by revenue.
+- `GET /api/v1/analytics/inventory` summarizes inventory records for optional date, product, and warehouse filters.
+
+Every analytics endpoint requires authentication and derives its organization filter from the authenticated user. Date ranges are validated, ranking limits are bounded to 100, and grouping/filter parameters are explicitly constrained. The frontend analytics overview presents summary cards, monthly trend rows, top products, and warehouse performance without loading raw sales data into the browser. Forecasting, low-stock thresholds, supplier performance scoring, and decision recommendations remain deferred.
