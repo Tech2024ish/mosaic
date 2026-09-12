@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     storage_root: str = ".mosaic-storage"
     max_upload_size_bytes: int = 25_000_000
+    report_export_max_rows: int = 50_000
     db_pool_size: int = 5
     db_max_overflow: int = 10
     db_pool_timeout_seconds: int = 30
@@ -44,8 +45,8 @@ class Settings(BaseSettings):
     def build_database_url(self) -> "Settings":
         if self.access_token_expire_minutes < 1:
             raise ValueError("access_token_expire_minutes must be positive")
-        if self.max_upload_size_bytes < 1:
-            raise ValueError("max_upload_size_bytes must be positive")
+        if self.max_upload_size_bytes < 1 or self.report_export_max_rows < 1:
+            raise ValueError("upload and report export limits must be positive")
         if self.db_pool_size < 1 or self.db_max_overflow < 0 or self.db_pool_timeout_seconds < 1:
             raise ValueError("database pool settings are invalid")
         if self.environment.lower() in {"production", "prod"}:

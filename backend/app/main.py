@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_request_id, request_id_middleware
-from app.routers import analytics, api, auth, health, imports, master_data, sales
+from app.routers import analytics, api, auth, health, imports, master_data, reports, sales
 
 settings = get_settings()
 configure_logging()
@@ -45,6 +45,7 @@ async def unhandled_exception_handler(_: Request, exc: Exception) -> JSONRespons
 
 app.include_router(health.router)
 app.include_router(analytics.router, prefix=settings.api_v1_prefix)
+app.include_router(reports.router, prefix=settings.api_v1_prefix)
 app.include_router(master_data.router, prefix=settings.api_v1_prefix)
 app.include_router(sales.router, prefix=settings.api_v1_prefix)
 app.include_router(api.router, prefix=settings.api_v1_prefix)
