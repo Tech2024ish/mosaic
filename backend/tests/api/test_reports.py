@@ -127,20 +127,16 @@ def test_reports_compose_analytics_and_support_csv_export() -> None:
     inventory = client.get("/api/v1/reports/inventory", headers=headers)
     assert inventory.status_code == 200
     assert inventory.json()["summary"]["inventory_record_count"] == 1
-    assert inventory.json()["items"][0]["quantity_on_hand"] == 75
+    assert Decimal(str(inventory.json()["items"][0]["quantity_on_hand"])) == Decimal("75")
 
     warehouses = client.get("/api/v1/reports/warehouses", headers=headers)
     assert warehouses.status_code == 200
     assert warehouses.json()["items"][0]["warehouse_name"] == "Main Warehouse"
 
-    export = client.get(
-        "/api/v1/reports/inventory/export?date_from=2026-02-01", headers=headers
-    )
+    export = client.get("/api/v1/reports/inventory/export?date_from=2026-02-01", headers=headers)
     assert export.status_code == 200
     assert export.headers["content-type"].startswith("text/csv")
-    assert "mosaic-inventory-report-2026-02-01-all.csv" in export.headers[
-        "content-disposition"
-    ]
+    assert "mosaic-inventory-report-2026-02-01-time.csv" in export.headers["content-disposition"]
     rows = list(csv.reader(io.StringIO(export.text)))
     assert rows[0] == [
         "product_code",

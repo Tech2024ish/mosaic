@@ -1,5 +1,16 @@
 # Data ingestion
 
+## Phase 11 reports and exports
+
+Reporting endpoints package analytics into reusable business reports:
+
+- `/api/v1/reports/sales` includes a sales summary, time trend, top products, and warehouse performance.
+- `/api/v1/reports/products` returns ranked product performance.
+- `/api/v1/reports/inventory` returns inventory summary and product/warehouse snapshot details.
+- `/api/v1/reports/warehouses` returns ranked warehouse performance.
+
+Each report accepts `date_from`, `date_to`, optional product/warehouse codes, a bounded `limit`, and a supported period where relevant. Append `/export?format=csv` to download a stable tabular CSV. Exports are tenant-scoped, use safe `Content-Disposition` filenames, escape values with the standard CSV writer, and stream database results. `REPORT_EXPORT_MAX_ROWS` limits large sales/inventory exports. JSON and CSV use the same reporting service and filters; no report files are stored on disk.
+
 Phase 2 supports one dataset: `sales_history`. Uploads are tenant-owned and use this canonical schema:
 
 | Column | Rules |

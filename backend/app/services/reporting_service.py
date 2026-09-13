@@ -5,10 +5,9 @@ from collections.abc import Iterator
 from datetime import date
 from typing import Any
 
-from sqlalchemy import Select, and_, select
+from sqlalchemy import Select, and_, func, select
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.models.inventory_snapshot import InventorySnapshot
 from app.models.product import Product
 from app.models.sales_history import SalesHistory
@@ -29,6 +28,7 @@ from app.schemas.reports import (
 )
 from app.services.analytics_service import (
     _decimal,
+    _latest_inventory_query,
     inventory_analytics,
     sales_analytics,
     sales_trend,
@@ -115,7 +115,49 @@ def inventory_rows(
     warehouse_code: str | None,
     limit: int | None,
 ) -> Select[Any]:
-    statement: Select[Any] = (
+    if date_from is None and date_to is None:
+        latest = _latest_inventory_query(organization_id).subquery()
+        statement: Select[Any] = (
+            select(
+                Product.product_code,
+                Product.name,
+                Warehouse.warehouse_code,
+                Warehouse.name,
+                latest.c.snapshot_date,
+                latest.c.quantity_on_hand,
+                latest.c.unit_cost,
+            )
+            .select_from(latest)
+            .join(
+                Product,
+                and_(
+                    Product.id == latest.c.product_id,
+                    Product.organization_id == organization_id,
+                ),
+            )
+            .join(
+                Warehouse,
+                and_(
+                    Warehouse.id == latest.c.warehouse_id,
+                    Warehouse.organization_id == organization_id,
+                ),
+            )
+            .order_by(
+                latest.c.snapshot_date.desc(),
+                Product.product_code,
+                Warehouse.warehouse_code,
+                latest.c.id,
+            )
+        )
+        if product_code:
+            statement = statement.where(Product.product_code == product_code.strip().upper())
+        if warehouse_code:
+            statement = statement.where(Warehouse.warehouse_code == warehouse_code.strip().upper())
+        if limit is not None:
+            statement = statement.limit(limit)
+        return statement
+
+    historical_statement: Select[Any] = (
         select(
             Product.product_code,
             Product.name,
@@ -148,16 +190,64 @@ def inventory_rows(
         )
     )
     if date_from is not None:
-        statement = statement.where(InventorySnapshot.snapshot_date >= date_from)
+        historical_statement = historical_statement.where(
+            InventorySnapshot.snapshot_date >= date_from
+        )
     if date_to is not None:
-        statement = statement.where(InventorySnapshot.snapshot_date <= date_to)
+        historical_statement = historical_statement.where(
+            InventorySnapshot.snapshot_date <= date_to
+        )
+    if product_code:
+        historical_statement = historical_statement.where(
+            Product.product_code == product_code.strip().upper()
+        )
+    if warehouse_code:
+        historical_statement = historical_statement.where(
+            Warehouse.warehouse_code == warehouse_code.strip().upper()
+        )
+    if limit is not None:
+        historical_statement = historical_statement.limit(limit)
+    return historical_statement
+
+
+def report_inventory_summary(
+    db: Session,
+    organization_id: uuid.UUID,
+    date_from: date | None,
+    date_to: date | None,
+    product_code: str | None,
+    warehouse_code: str | None,
+) -> InventoryAnalyticsResponse:
+    if date_from is not None or date_to is not None:
+        return inventory_analytics(
+            db, organization_id, date_from, date_to, product_code, warehouse_code
+        )
+    latest = _latest_inventory_query(organization_id).subquery()
+    statement = (
+        select(
+            func.count(latest.c.id),
+            func.coalesce(func.sum(latest.c.quantity_on_hand), 0),
+        )
+        .select_from(latest)
+        .join(
+            Product,
+            and_(Product.id == latest.c.product_id, Product.organization_id == organization_id),
+        )
+        .join(
+            Warehouse,
+            and_(
+                Warehouse.id == latest.c.warehouse_id, Warehouse.organization_id == organization_id
+            ),
+        )
+    )
     if product_code:
         statement = statement.where(Product.product_code == product_code.strip().upper())
     if warehouse_code:
         statement = statement.where(Warehouse.warehouse_code == warehouse_code.strip().upper())
-    if limit is not None:
-        statement = statement.limit(limit)
-    return statement
+    row = db.execute(statement).one()
+    return InventoryAnalyticsResponse(
+        inventory_record_count=int(row[0]), total_quantity=_decimal(row[1])
+    )
 
 
 def inventory_report(
@@ -169,7 +259,7 @@ def inventory_report(
     warehouse_code: str | None,
     limit: int,
 ) -> InventoryReportResponse:
-    summary: InventoryAnalyticsResponse = inventory_analytics(
+    summary: InventoryAnalyticsResponse = report_inventory_summary(
         db, organization_id, date_from, date_to, product_code, warehouse_code
     )
     rows = db.execute(
@@ -230,6 +320,7 @@ def stream_csv_report(
         statement = _apply_sales_filters(
             statement, date_from, date_to, product_code, warehouse_code
         )
+        statement = statement.limit(limit)
         for row in db.execute(statement.execution_options(stream_results=True)).yield_per(1000):
             yield _csv_line(tuple(row))
         return
@@ -254,7 +345,7 @@ def stream_csv_report(
                 date_to,
                 product_code,
                 warehouse_code,
-                get_settings().report_export_max_rows,
+                limit,
             ).execution_options(stream_results=True)
         ).yield_per(1000):
             yield _csv_line(tuple(row))

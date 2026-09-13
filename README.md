@@ -151,3 +151,15 @@ Analytics endpoints aggregate existing tenant-owned data in PostgreSQL:
 - `GET /api/v1/analytics/inventory` summarizes inventory records for optional date, product, and warehouse filters.
 
 Every analytics endpoint requires authentication and derives its organization filter from the authenticated user. Date ranges are validated, ranking limits are bounded to 100, and grouping/filter parameters are explicitly constrained. The frontend analytics overview presents summary cards, monthly trend rows, top products, and warehouse performance without loading raw sales data into the browser. Forecasting, low-stock thresholds, supplier performance scoring, and decision recommendations remain deferred.
+
+## Phase 11 reporting and export
+
+Reports compose the Phase 10 analytics layer into reusable business outputs:
+
+- `GET /api/v1/reports/sales`
+- `GET /api/v1/reports/products`
+- `GET /api/v1/reports/inventory`
+- `GET /api/v1/reports/warehouses`
+- `GET /api/v1/reports/{sales|products|inventory|warehouses}/export?format=csv`
+
+Reports accept validated date, product, warehouse, period, and bounded limit filters. CSV exports use stable UTF-8 columns, safe generated filenames, tenant-scoped database queries, and streaming responses. Sales and inventory exports are capped by `REPORT_EXPORT_MAX_ROWS` (50,000 by default); aggregate product and warehouse exports remain bounded by the report limit. No PDF, Excel, persistent report files, or separate reporting database was introduced.

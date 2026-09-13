@@ -116,6 +116,11 @@ def export_report(
         raise HTTPException(status_code=422, detail="Only CSV export is supported")
     date_from, date_to, product_code, warehouse_code, period, limit = report_query(query)
     settings = get_settings()
+    export_limit = (
+        settings.report_export_max_rows
+        if report_type in {ReportType.SALES, ReportType.INVENTORY}
+        else limit
+    )
     start = date_from.isoformat() if date_from else "all"
     end = date_to.isoformat() if date_to else "time"
     filename = PurePath(f"mosaic-{report_type.value}-report-{start}-{end}.csv").name
@@ -131,7 +136,7 @@ def export_report(
                 product_code,
                 warehouse_code,
                 period,
-                min(limit, settings.report_export_max_rows),
+                export_limit,
             )
 
     return StreamingResponse(

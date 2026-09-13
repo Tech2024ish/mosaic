@@ -1,5 +1,11 @@
 # MOSAIC architecture
 
+## Phase 11 reporting and export
+
+Reporting is a composition layer above analytics, not a duplicate analytics implementation. `app.routers.reports` validates report filters and delegates to `app.services.reporting_service`. Sales reports reuse the Phase 10 sales summary, trend, product ranking, and warehouse ranking functions. Product and warehouse reports expose those rankings as stable report envelopes. Inventory reports provide tenant-scoped product/warehouse snapshot rows and inventory summaries.
+
+The same reporting service powers JSON responses and CSV exports. Exports select only report columns, apply the organization predicate in SQL, and use a `StreamingResponse` with a generated filename. Sales exports are bounded by the configured report export limit; report ranking/detail limits are bounded at the API boundary. CSV generation uses Python's standard CSV writer for correct escaping and UTF-8 output. No report data is persisted and no migration was required.
+
 ## Phase 0 baseline
 
 Phase 0 is the maintainability and safety baseline for the implemented platform, not a second application foundation. Configuration is centralized in Pydantic Settings and loaded from environment variables. Production configuration rejects debug mode and development-only signing keys, while database pool, upload, CORS, storage, and token settings remain explicit.
