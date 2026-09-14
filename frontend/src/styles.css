@@ -35,6 +35,10 @@ nav { display: flex; gap: 30px; margin-right: auto; color: #61716b; font-size: .
 .detail-card h3 { font-size: .85rem; margin: 5px 0; }
 .empty-state { color: #68766e; }
 .operation-actions { display: grid; gap: 12px; margin-top: 16px; }
+.dashboard-toolbar { display: flex; align-items: end; gap: 18px; max-width: 1120px; margin: 28px auto 0; padding: 0 36px; }
+.dashboard-toolbar label { min-width: 160px; margin: 0; }
+.dashboard-toolbar select { display: block; width: 100%; margin-top: 8px; padding: 11px 12px; border: 1px solid #dfe6df; border-radius: 6px; color: #18352a; background: #fbfcfa; font-size: .84rem; }
+.dashboard-loading { padding-bottom: 12px; color: #68766e; font-size: .78rem; }
 .event-list { display: grid; gap: 6px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #e5e9e3; }
 .event-list small { color: #68766e; text-transform: capitalize; }
-@media (max-width: 700px) { .operations-section { margin: 0 18px 64px; padding: 22px; } .stats-grid { grid-template-columns: 1fr; } .history-row, .trend-row { grid-template-columns: 1fr auto; gap: 10px; } .trend-bar { grid-column: 1 / -1; grid-row: 2; } .report-filters { grid-template-columns: 1fr; } .report-actions { flex-wrap: wrap; } }
+@media (max-width: 700px) { .operations-section { margin: 0 18px 64px; padding: 22px; } .dashboard-toolbar { align-items: stretch; flex-direction: column; margin: 22px 18px 0; padding: 0; gap: 8px; } .dashboard-toolbar label { min-width: 0; } .dashboard-loading { padding-bottom: 0; } .stats-grid { grid-template-columns: 1fr; } .history-row, .trend-row { grid-template-columns: 1fr auto; gap: 10px; } .trend-bar { grid-column: 1 / -1; grid-row: 2; } .report-filters { grid-template-columns: 1fr; } .report-actions { flex-wrap: wrap; } }

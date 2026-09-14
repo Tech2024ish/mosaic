@@ -100,3 +100,7 @@ Dataset dispatch is isolated in `domain/ingestion/registry.py`; a future invento
 Sales analytics is available at `GET /api/v1/analytics/sales`. It returns tenant-scoped summary metrics and optional PostgreSQL-side grouped results. Supported dimensions are `date`, `product`, and `warehouse`; date grouping accepts `period=day|week|month`. Existing date and business-code filters can be combined with grouping, and invalid date ranges or grouping values return validation errors.
 
 The analytics query reads normalized `sales_history` records and does not create a second analytics store. Product and warehouse names are resolved only within the authenticated organization. Empty filters produce valid zero/empty responses.
+
+## Phase 13 dashboard usage
+
+The authenticated Overview uses the analytics query and existing trend/ranking endpoints to present decision KPIs and grouped performance. Select start/end dates and a day, week, or month trend period; the selected filters are sent to the backend, which validates the range and performs tenant-scoped aggregation. Tenants with no matching sales receive an empty state rather than fabricated metrics.

@@ -98,3 +98,7 @@ Important lifecycle events are recorded in `import_events` with the import, orga
 Phase 12 extends the existing analytics router and service rather than creating a parallel reporting system. `GET /api/v1/analytics/sales` retains its summary response and accepts a strict `group_by` whitelist (`date`, `product`, or `warehouse`). Grouped rows include transaction count, quantity, revenue, and average sale value. Date grouping supports day, week, or month through the validated `period` parameter.
 
 All filters and aggregates apply `current_user.organization_id` in the database query. The response is bounded by the existing `limit` maximum of 100, uses Decimal-safe monetary values, and requires authentication. No schema change or migration was needed.
+
+## Phase 13 decision intelligence overview
+
+The authenticated Overview dashboard composes the existing analytics endpoints for KPI cards, date-filtered revenue trends, top products, warehouse performance, and grouped sales exploration. It issues concurrent tenant-scoped requests and keeps aggregation in PostgreSQL. Loading, empty, validation, and API-failure states are handled in the existing React shell. No new backend endpoint, database table, migration, chart dependency, or authentication mechanism was introduced.

@@ -110,6 +110,10 @@ GET /api/v1/analytics/sales?group_by=product&date_from=2026-01-01&date_to=2026-0
 
 The endpoint requires a bearer token and performs aggregation in PostgreSQL using the authenticated user's organization scope. No database migration was required.
 
+## Phase 13 decision intelligence overview
+
+Authenticated users can use the Overview dashboard to review revenue, transactions, units sold, average sale value, revenue trends, grouped product/warehouse/date performance, and the selected analysis period. Date filters and day/week/month trend periods are sent to the existing tenant-scoped analytics APIs; the browser does not aggregate raw sales data.
+
 ## Authentication
 
 Register an account, log in, and use the returned bearer token for protected endpoints. Login creates a revocable database-backed session:
