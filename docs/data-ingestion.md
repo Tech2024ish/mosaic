@@ -95,3 +95,8 @@ Import operations are available only to authenticated users and remain scoped to
 `GET /api/v1/imports/{import_id}/events` exposes a paginated, deterministic activity history. Events include creation, processing start, completion, failure, retry request, and cancellation. `GET /api/v1/imports/{import_id}/errors/report` streams a server-generated CSV validation report with a safe generated filename. `GET /api/v1/imports/stats` includes cancellations and retry counts in addition to row totals.
 
 Dataset dispatch is isolated in `domain/ingestion/registry.py`; a future inventory handler can register its parser, validator, and normalizer without changing upload orchestration. The parser is iterator-based and storage reads are chunked. Database writes use SQLAlchemy’s unit of work and can be batched as volumes grow; the current in-process worker is intentionally simple and is not durable across process restarts. A durable queue/worker should be introduced when job volume or runtime makes that limitation material.
+# Phase 12 analytics query
+
+Sales analytics is available at `GET /api/v1/analytics/sales`. It returns tenant-scoped summary metrics and optional PostgreSQL-side grouped results. Supported dimensions are `date`, `product`, and `warehouse`; date grouping accepts `period=day|week|month`. Existing date and business-code filters can be combined with grouping, and invalid date ranges or grouping values return validation errors.
+
+The analytics query reads normalized `sales_history` records and does not create a second analytics store. Product and warehouse names are resolved only within the authenticated organization. Empty filters produce valid zero/empty responses.

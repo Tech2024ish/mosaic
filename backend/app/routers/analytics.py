@@ -10,6 +10,7 @@ from app.schemas.analytics import (
     AnalyticsQuery,
     AnalyticsSummaryResponse,
     InventoryAnalyticsResponse,
+    SalesAnalyticsQuery,
     SalesAnalyticsResponse,
     SalesTrendResponse,
     TopItemsQuery,
@@ -20,7 +21,7 @@ from app.schemas.analytics import (
 from app.services.analytics_service import (
     analytics_summary,
     inventory_analytics,
-    sales_analytics,
+    sales_analytics_query,
     sales_trend,
     top_products,
     warehouse_performance,
@@ -53,18 +54,21 @@ def summary(
 
 @router.get("/sales", response_model=SalesAnalyticsResponse)
 def sales(
-    query: AnalyticsQuery = Depends(),
+    query: SalesAnalyticsQuery = Depends(),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> SalesAnalyticsResponse:
     validate_date_range(query.date_from, query.date_to)
-    return sales_analytics(
+    return sales_analytics_query(
         db,
         user.organization_id,
         query.date_from,
         query.date_to,
         query.product_code,
         query.warehouse_code,
+        query.group_by,
+        query.period,
+        query.limit,
     )
 
 

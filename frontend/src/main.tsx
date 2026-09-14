@@ -14,6 +14,8 @@ type MasterItem = Record<string, string | number | boolean | null>;
 type AnalyticsValue = number | string;
 type AnalyticsSummary = { sales_count: number; total_quantity: AnalyticsValue; total_revenue: AnalyticsValue; average_sale_value: AnalyticsValue; product_count: number; warehouse_count: number; supplier_count: number; inventory_quantity: AnalyticsValue; inventory_record_count: number };
 type TrendItem = { period: string; sales_count: number; total_quantity: AnalyticsValue; revenue: AnalyticsValue };
+type SalesGroup = { key: string; label: string | null; sales_count: number; total_quantity: AnalyticsValue; total_revenue: AnalyticsValue; average_sale_value: AnalyticsValue };
+type AnalyticsGroupBy = "date" | "product" | "warehouse";
 type RankedItem = { rank: number; product_code?: string; product_name?: string | null; warehouse_code?: string; warehouse_name?: string | null; sales_count: number; quantity_sold: AnalyticsValue; revenue: AnalyticsValue };
 type ReportType = "sales" | "products" | "inventory" | "warehouses";
 type ReportItem = RankedItem & { snapshot_date?: string; quantity_on_hand?: AnalyticsValue; unit_cost?: AnalyticsValue | null };
@@ -44,6 +46,10 @@ function App() {
   const [topProducts, setTopProducts] = useState<RankedItem[]>([]);
   const [warehousePerformance, setWarehousePerformance] = useState<RankedItem[]>([]);
   const [analyticsMessage, setAnalyticsMessage] = useState("");
+  const [analyticsDateFrom, setAnalyticsDateFrom] = useState("");
+  const [analyticsDateTo, setAnalyticsDateTo] = useState("");
+  const [analyticsGroupBy, setAnalyticsGroupBy] = useState<AnalyticsGroupBy>("product");
+  const [salesGroups, setSalesGroups] = useState<SalesGroup[]>([]);
   const [reportType, setReportType] = useState<ReportType>("sales");
   const [reportDateFrom, setReportDateFrom] = useState("");
   const [reportDateTo, setReportDateTo] = useState("");
@@ -89,17 +95,22 @@ function App() {
 
   const refreshAnalytics = async () => {
     if (!token) return;
-    const [summaryResponse, trendResponse, productsResponse, warehousesResponse] = await Promise.all([
+    const groupParams = new URLSearchParams({ group_by: analyticsGroupBy, period: "month", limit: "20" });
+    if (analyticsDateFrom) groupParams.set("date_from", analyticsDateFrom);
+    if (analyticsDateTo) groupParams.set("date_to", analyticsDateTo);
+    const [summaryResponse, trendResponse, productsResponse, warehousesResponse, groupedResponse] = await Promise.all([
       apiFetch(`${API_URL}/api/v1/analytics/summary`),
       apiFetch(`${API_URL}/api/v1/analytics/sales/trend?period=month`),
       apiFetch(`${API_URL}/api/v1/analytics/products/top?limit=5`),
       apiFetch(`${API_URL}/api/v1/analytics/warehouses/performance?limit=5`),
+      apiFetch(`${API_URL}/api/v1/analytics/sales?${groupParams.toString()}`),
     ]);
     if (summaryResponse.ok && trendResponse.ok && productsResponse.ok && warehousesResponse.ok) {
       setAnalyticsSummary(await summaryResponse.json());
       setAnalyticsTrend((await trendResponse.json()).data);
       setTopProducts((await productsResponse.json()).items);
       setWarehousePerformance((await warehousesResponse.json()).items);
+      if (groupedResponse.ok) setSalesGroups((await groupedResponse.json()).groups);
       setAnalyticsMessage("");
     } else setAnalyticsMessage("Analytics could not be loaded.");
   };
@@ -144,7 +155,7 @@ function App() {
   };
 
   useEffect(() => { refreshMasterData(); }, [token, masterType]);
-  useEffect(() => { refreshAnalytics(); }, [token]);
+  useEffect(() => { refreshAnalytics(); }, [token, analyticsGroupBy, analyticsDateFrom, analyticsDateTo]);
 
   useEffect(() => {
     if (!job || ["completed", "failed", "cancelled"].includes(job.status)) return;
@@ -210,6 +221,7 @@ function App() {
   return <div className="app-shell">
     <header className="topbar"><a className="brand" href="/">MOSAIC<span>.</span></a><nav><a className="active" href="#overview">Overview</a><a href="#ingestion">Data intake</a><a href="#operations">Operations</a>{token && <><a href="#analytics">Analytics</a><a href="#reports">Reports</a></>}</nav><div className="topbar-actions"><span className="connection"><i /> {apiStatus}</span>{token ? <><span className="user-label">{currentUser?.name ?? "Workspace"}</span><button className="button button-ghost" onClick={signOut}>Sign out</button></> : <a className="button button-gold" href="#access">Get started</a>}</div></header>
     <main>
+      {token && <section className="operations-section analytics-query" id="sales-query"><div className="operations-heading"><div><p className="eyebrow">Sales query</p><h2>Explore grouped performance</h2></div><button className="button button-ghost" type="button" onClick={refreshAnalytics}>Refresh</button></div><div className="report-filters"><label>Group by<select value={analyticsGroupBy} onChange={(event) => setAnalyticsGroupBy(event.target.value as AnalyticsGroupBy)}><option value="product">Product</option><option value="warehouse">Warehouse</option><option value="date">Date</option></select></label><label>From<input type="date" value={analyticsDateFrom} onChange={(event) => setAnalyticsDateFrom(event.target.value)} /></label><label>To<input type="date" value={analyticsDateTo} onChange={(event) => setAnalyticsDateTo(event.target.value)} /></label></div>{salesGroups.length === 0 ? <p className="empty-state">No grouped sales match these filters.</p> : <div className="history-list">{salesGroups.map((item) => <article className="history-row" key={item.key}><div><strong>{item.label ?? item.key}</strong><small>{item.sales_count} transactions · {String(item.total_quantity)} units</small></div><span>{String(item.total_revenue)}</span></article>)}</div>}</section>}
       <section className="hero" id="overview"><div className="hero-copy"><p className="eyebrow">Supply-chain decision intelligence</p><h1>Make every supply decision <em>clearer.</em></h1><p className="hero-text">MOSAIC connects the signals across your supply chain so your team can see what is happening, understand why, and act with confidence.</p><div className="hero-actions"><a className="button button-gold" href="#access">Enter your workspace <span>→</span></a><a className="text-link" href="#ingestion">Explore data intake <span>↗</span></a></div></div><div className="hero-art" aria-hidden="true"><div className="art-grid" /><div className="art-orbit orbit-one" /><div className="art-orbit orbit-two" /><div className="art-node node-one" /><div className="art-node node-two" /><div className="art-node node-three" /><div className="art-label label-one">DEMAND</div><div className="art-label label-two">SUPPLY</div><div className="art-label label-three">ACTION</div></div></section>
       <section className="access-section" id="access"><div className="section-intro"><p className="eyebrow">Your operating picture</p><h2>Start with a clearer view.</h2><p>Securely connect your operational data and turn it into decisions your business can explain.</p></div>{!token ? <form className="auth-card" onSubmit={authenticate}><div className="card-heading"><span className="card-mark">✦</span><div><p className="eyebrow">MOSAIC workspace</p><h2>{authMode === "login" ? "Welcome back" : "Create your workspace"}</h2></div></div><div className="tabs"><button type="button" className={authMode === "login" ? "selected" : ""} onClick={() => setAuthMode("login")}>Sign in</button><button type="button" className={authMode === "register" ? "selected" : ""} onClick={() => setAuthMode("register")}>Register</button></div>{authMode === "register" && <label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" required /></label>}<label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 12 characters" minLength={12} required /></label><button className="button button-dark submit-button" type="submit">{authMode === "login" ? "Sign in to MOSAIC" : "Create workspace"}<span>→</span></button>{authMessage && <p className="success-message">{authMessage}</p>}<p className="privacy-note">Your workspace is tenant-isolated and protected.</p></form> : <form className="auth-card import-form" id="ingestion" onSubmit={submitImport}><div className="card-heading"><span className="card-mark">↗</span><div><p className="eyebrow">Data intake</p><h2>Import operational data</h2></div></div><p className="card-description">Upload a CSV and MOSAIC will validate, normalize, and stage it safely.</p><label>Dataset<select value={datasetType} onChange={(event) => setDatasetType(event.target.value as DatasetType)}><option value="sales_history">Sales history</option><option value="products">Products</option><option value="warehouses">Warehouses</option><option value="suppliers">Suppliers</option><option value="inventory_snapshots">Inventory snapshots</option></select></label><label className="file-drop"><input type="file" accept=".csv,text/csv" onChange={(event: ChangeEvent<HTMLInputElement>) => setFile(event.target.files?.[0] ?? null)} /><span className="upload-icon">↑</span><strong>{file ? file.name : "Choose a CSV file"}</strong><small>{file ? `${(file.size / 1024).toFixed(1)} KB selected` : "Maximum file size: 25 MB"}</small></label><button className="button button-dark submit-button" type="submit" disabled={!file}>Start secure import <span>→</span></button>{job && <p className="summary">Job {job.id.slice(0, 8)} · {job.status} · {job.successful_rows}/{job.total_rows} rows accepted{job.failed_rows ? ` · ${job.failed_rows} rejected` : ""}</p>}{message && <p className="error-message">{message}</p>}</form>}</section>
       {token && <section className="operations-section" id="operations"><div className="operations-heading"><div><p className="eyebrow">Operations</p><h2>Import history</h2></div><button className="button button-ghost" onClick={refreshOperations}>Refresh</button></div>{stats && <div className="stats-grid"><div><strong>{stats.total_imports}</strong><span>Imports</span></div><div><strong>{stats.successful_rows}</strong><span>Rows accepted</span></div><div><strong>{stats.failed_rows}</strong><span>Rows rejected</span></div></div>}<div className="history-list">{history.length === 0 ? <p className="empty-state">No imports yet. Upload your first sales-history CSV above.</p> : history.map((item) => <article className="history-row" key={item.id}><div><strong>{item.original_filename}</strong><small>{item.id.slice(0, 8)} · {item.status}</small></div><span>{item.successful_rows}/{item.total_rows} rows</span><button className="text-link" onClick={() => inspectImport(item)}>Inspect</button>{item.status === "failed" && <button className="text-link" onClick={() => retryImport(item)}>Retry</button>}{["pending", "processing"].includes(item.status) && <button className="text-link" onClick={() => cancelImport(item)}>Cancel</button>}</article>)}</div>{job && <div className="detail-card"><p className="eyebrow">Selected import</p><h3>{job.id}</h3><p>{job.status} · {job.failed_rows} validation errors</p>{job.failed_rows > 0 && <button className="text-link" onClick={() => downloadReport(job)}>Download validation report</button>}{events.length > 0 && <div className="event-list"><p className="eyebrow">Activity</p>{events.map((event) => <small key={event.id}>{event.event_type.replaceAll("_", " ")} · {new Date(event.created_at).toLocaleString()}</small>)}</div>}{errors.length > 0 && <ul className="error-list">{errors.map((error) => <li key={`${error.row_number}-${error.message}`}>Row {error.row_number}{error.field_name ? ` (${error.field_name})` : ""}: {error.message}</li>)}</ul>}</div>}</section>}

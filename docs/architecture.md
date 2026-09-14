@@ -93,3 +93,8 @@ Analytics query parameters are bounded and explicit: dates are validated, trend 
 Import administration remains tenant-scoped and uses the existing database and in-process `BackgroundTasks` worker. Failed jobs can be retried using the existing file and row fingerprints. Pending and processing jobs can be cooperatively cancelled; the processor checks the database between rows and uses a conditional completion update so a cancellation cannot be overwritten by a late completion.
 
 Important lifecycle events are recorded in `import_events` with the import, organization, event type, optional actor, timestamp, and safe metadata. Validation reports are streamed from tenant-verified database errors as CSV. Operational statistics include import outcomes, row counts, cancellations, and retry requests. Logs use standard-library structured `extra` fields and never include uploaded content, credentials, tokens, or secrets.
+# Phase 12: sales analytics query
+
+Phase 12 extends the existing analytics router and service rather than creating a parallel reporting system. `GET /api/v1/analytics/sales` retains its summary response and accepts a strict `group_by` whitelist (`date`, `product`, or `warehouse`). Grouped rows include transaction count, quantity, revenue, and average sale value. Date grouping supports day, week, or month through the validated `period` parameter.
+
+All filters and aggregates apply `current_user.organization_id` in the database query. The response is bounded by the existing `limit` maximum of 100, uses Decimal-safe monetary values, and requires authentication. No schema change or migration was needed.

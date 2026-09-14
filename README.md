@@ -100,6 +100,16 @@ See [docs/data-ingestion.md](docs/data-ingestion.md) for supported CSV formats. 
 
 The foundation does not include forecasting, machine learning, optimization, scenario simulation, recommendations, or ERP capabilities. Those will be added incrementally after the ingestion and operations foundations.
 
+## Phase 12 sales analytics query
+
+`GET /api/v1/analytics/sales` supports tenant-scoped summary metrics and optional grouped results. Use `group_by=date|product|warehouse`, `period=day|week|month` for date groups, and `limit=1..100`. Existing `date_from`, `date_to`, `product_code`, and `warehouse_code` filters remain supported. Example:
+
+```text
+GET /api/v1/analytics/sales?group_by=product&date_from=2026-01-01&date_to=2026-01-31
+```
+
+The endpoint requires a bearer token and performs aggregation in PostgreSQL using the authenticated user's organization scope. No database migration was required.
+
 ## Authentication
 
 Register an account, log in, and use the returned bearer token for protected endpoints. Login creates a revocable database-backed session:

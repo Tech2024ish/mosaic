@@ -14,7 +14,9 @@ from app.models.warehouse import Warehouse
 from app.schemas.analytics import (
     AnalyticsSummaryResponse,
     InventoryAnalyticsResponse,
+    SalesAnalyticsGroup,
     SalesAnalyticsResponse,
+    SalesGroupBy,
     SalesTrendItem,
     SalesTrendResponse,
     TopProductItem,
@@ -76,6 +78,121 @@ def sales_analytics(
         total_revenue=_decimal(row[2]),
         average_sale_value=_decimal(row[3]),
     )
+
+
+def sales_analytics_query(
+    db: Session,
+    organization_id: uuid.UUID,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    product_code: str | None = None,
+    warehouse_code: str | None = None,
+    group_by: SalesGroupBy | None = None,
+    period: TrendPeriod = TrendPeriod.DAY,
+    limit: int = 100,
+) -> SalesAnalyticsResponse:
+    summary = sales_analytics(db, organization_id, date_from, date_to, product_code, warehouse_code)
+    if group_by is None:
+        return summary
+
+    filtered = _sales_statement(
+        organization_id, date_from, date_to, product_code, warehouse_code
+    ).subquery()
+    revenue = filtered.c.quantity * filtered.c.unit_price
+    group_expression: Any
+    if group_by == SalesGroupBy.DATE:
+        if db.get_bind().dialect.name == "sqlite":
+            format_string = {
+                TrendPeriod.DAY: "%Y-%m-%d",
+                TrendPeriod.WEEK: "%Y-W%W",
+                TrendPeriod.MONTH: "%Y-%m",
+            }[period]
+            group_expression = func.strftime(format_string, filtered.c.sale_date)
+        else:
+            group_expression = func.date_trunc(period.value, filtered.c.sale_date)
+        statement = (
+            select(
+                group_expression,
+                func.count(filtered.c.id),
+                func.coalesce(func.sum(filtered.c.quantity), 0),
+                func.coalesce(func.sum(revenue), 0),
+                func.coalesce(func.avg(revenue), 0),
+            )
+            .group_by(group_expression)
+            .order_by(group_expression)
+            .limit(limit)
+        )
+    elif group_by == SalesGroupBy.PRODUCT:
+        group_expression = filtered.c.product_code
+        statement = (
+            select(
+                group_expression,
+                func.max(Product.name),
+                func.count(filtered.c.id),
+                func.coalesce(func.sum(filtered.c.quantity), 0),
+                func.coalesce(func.sum(revenue), 0),
+                func.coalesce(func.avg(revenue), 0),
+            )
+            .select_from(filtered)
+            .join(
+                Product,
+                and_(
+                    Product.organization_id == organization_id,
+                    Product.product_code == filtered.c.product_code,
+                ),
+                isouter=True,
+            )
+            .group_by(group_expression)
+            .order_by(func.sum(revenue).desc(), group_expression)
+            .limit(limit)
+        )
+    else:
+        group_expression = filtered.c.warehouse_code
+        statement = (
+            select(
+                group_expression,
+                func.max(Warehouse.name),
+                func.count(filtered.c.id),
+                func.coalesce(func.sum(filtered.c.quantity), 0),
+                func.coalesce(func.sum(revenue), 0),
+                func.coalesce(func.avg(revenue), 0),
+            )
+            .select_from(filtered)
+            .join(
+                Warehouse,
+                and_(
+                    Warehouse.organization_id == organization_id,
+                    Warehouse.warehouse_code == filtered.c.warehouse_code,
+                ),
+                isouter=True,
+            )
+            .group_by(group_expression)
+            .order_by(func.sum(revenue).desc(), group_expression)
+            .limit(limit)
+        )
+
+    rows = db.execute(statement).all()
+    groups: list[SalesAnalyticsGroup] = []
+    for row in rows:
+        if group_by == SalesGroupBy.DATE:
+            key = _format_period(row[0], period)
+            label = None
+            sales_count, total_quantity, total_revenue, average_sale_value = row[1:]
+        else:
+            key = str(row[0])
+            label = str(row[1]) if row[1] is not None else None
+            sales_count, total_quantity, total_revenue, average_sale_value = row[2:]
+        groups.append(
+            SalesAnalyticsGroup(
+                key=key,
+                label=label,
+                sales_count=int(sales_count),
+                total_quantity=_decimal(total_quantity),
+                total_revenue=_decimal(total_revenue),
+                average_sale_value=_decimal(average_sale_value),
+            )
+        )
+    return summary.model_copy(update={"groups": groups})
 
 
 def _latest_inventory_query(organization_id: uuid.UUID) -> Select[Any]:

@@ -11,11 +11,23 @@ class TrendPeriod(StrEnum):
     MONTH = "month"
 
 
+class SalesGroupBy(StrEnum):
+    DATE = "date"
+    PRODUCT = "product"
+    WAREHOUSE = "warehouse"
+
+
 class AnalyticsQuery(BaseModel):
     date_from: date | None = None
     date_to: date | None = None
     product_code: str | None = Field(default=None, max_length=200)
     warehouse_code: str | None = Field(default=None, max_length=200)
+
+
+class SalesAnalyticsQuery(AnalyticsQuery):
+    group_by: SalesGroupBy | None = None
+    period: TrendPeriod = TrendPeriod.DAY
+    limit: int = Field(default=100, ge=1, le=100)
 
 
 class TrendQuery(AnalyticsQuery):
@@ -39,6 +51,16 @@ class AnalyticsSummaryResponse(BaseModel):
 
 
 class SalesAnalyticsResponse(BaseModel):
+    sales_count: int
+    total_quantity: Decimal
+    total_revenue: Decimal
+    average_sale_value: Decimal
+    groups: list["SalesAnalyticsGroup"] = Field(default_factory=list)
+
+
+class SalesAnalyticsGroup(BaseModel):
+    key: str
+    label: str | None
     sales_count: int
     total_quantity: Decimal
     total_revenue: Decimal

@@ -222,6 +222,11 @@ def test_analytics_is_tenant_scoped_and_validates_queries() -> None:
         ]
         == "TENANT-B-1"
     )
+    first_grouped = client.get("/api/v1/analytics/sales?group_by=product", headers=first_headers)
+    second_grouped = client.get("/api/v1/analytics/sales?group_by=product", headers=second_headers)
+    assert first_grouped.json()["groups"][0]["key"] == "TENANT-A-1"
+    assert second_grouped.json()["groups"][0]["key"] == "TENANT-B-1"
+    assert "TENANT-B-1" not in {item["key"] for item in first_grouped.json()["groups"]}
 
     assert client.get("/api/v1/analytics/summary").status_code == 401
     assert (
@@ -238,4 +243,49 @@ def test_analytics_is_tenant_scoped_and_validates_queries() -> None:
     assert (
         client.get("/api/v1/analytics/products/top?limit=101", headers=first_headers).status_code
         == 422
+    )
+
+
+def test_sales_query_supports_safe_grouping_and_filters() -> None:
+    client = TestClient(app)
+    headers, organization_id = account(client)
+    seed_tenant(
+        organization_id,
+        "QUERY-A",
+        "QUERY-W-A",
+        [
+            ("QUERY-A-1", date(2026, 3, 1), "2", "10.1250", "QUERY-W-A-1"),
+            ("QUERY-A-1", date(2026, 3, 1), "1", "10.1250", "QUERY-W-A-1"),
+            ("QUERY-A-2", date(2026, 3, 2), "4", "5", "QUERY-W-A-2"),
+        ],
+    )
+
+    by_date = client.get("/api/v1/analytics/sales?group_by=date&period=day", headers=headers)
+    assert by_date.status_code == 200
+    assert [(item["key"], item["sales_count"]) for item in by_date.json()["groups"]] == [
+        ("2026-03-01", 2),
+        ("2026-03-02", 1),
+    ]
+    assert Decimal(str(by_date.json()["groups"][0]["total_revenue"])) == Decimal("30.3750")
+
+    by_product = client.get(
+        "/api/v1/analytics/sales?group_by=product&product_code=QUERY-A-1&limit=1",
+        headers=headers,
+    )
+    assert by_product.status_code == 200
+    assert by_product.json()["groups"][0]["key"] == "QUERY-A-1"
+    assert by_product.json()["groups"][0]["label"] == "Alpha Product"
+    assert by_product.json()["groups"][0]["sales_count"] == 2
+
+    by_warehouse = client.get("/api/v1/analytics/sales?group_by=warehouse", headers=headers)
+    assert by_warehouse.status_code == 200
+    assert by_warehouse.json()["groups"][0]["key"] == "QUERY-W-A-1"
+
+    empty = client.get(
+        "/api/v1/analytics/sales?group_by=product&product_code=missing", headers=headers
+    )
+    assert empty.status_code == 200
+    assert empty.json()["groups"] == []
+    assert (
+        client.get("/api/v1/analytics/sales?group_by=unknown", headers=headers).status_code == 422
     )
