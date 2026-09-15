@@ -21,6 +21,9 @@ type RankedItem = { rank: number; product_code?: string; product_name?: string |
 type ReportType = "sales" | "products" | "inventory" | "warehouses";
 type ReportItem = RankedItem & { snapshot_date?: string; quantity_on_hand?: AnalyticsValue; unit_cost?: AnalyticsValue | null };
 type ReportResult = { report_type: ReportType; summary?: Partial<AnalyticsSummary> & { total_quantity?: AnalyticsValue; inventory_record_count?: number }; trend?: TrendItem[]; top_products?: RankedItem[]; warehouse_performance?: RankedItem[]; items?: ReportItem[] };
+type InventorySummary = { total_inventory_units: AnalyticsValue; products_with_inventory: number; warehouses_with_inventory: number; out_of_stock_products: number };
+type InventoryWarehouse = { warehouse_id: string; warehouse_code: string; warehouse_name: string; total_quantity: AnalyticsValue; product_count: number; status: "in_stock" | "out_of_stock" };
+type InventoryProduct = { product_id: string; product_code: string; product_name: string; total_quantity: AnalyticsValue; warehouse_count: number; status: "in_stock" | "out_of_stock" };
 
 function App() {
   const [apiStatus, setApiStatus] = useState("checking connection");
@@ -29,6 +32,7 @@ function App() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [token, setToken] = useState(() => window.localStorage.getItem("mosaic_access_token") ?? "");
+  const [showAccess, setShowAccess] = useState(() => window.location.hash === "#access");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authMessage, setAuthMessage] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -49,6 +53,8 @@ function App() {
   const [analyticsMessage, setAnalyticsMessage] = useState("");
   const [analyticsDateFrom, setAnalyticsDateFrom] = useState("");
   const [analyticsDateTo, setAnalyticsDateTo] = useState("");
+  const [appliedDateFrom, setAppliedDateFrom] = useState("");
+  const [appliedDateTo, setAppliedDateTo] = useState("");
   const [analyticsGroupBy, setAnalyticsGroupBy] = useState<AnalyticsGroupBy>("product");
   const [analyticsPeriod, setAnalyticsPeriod] = useState<AnalyticsPeriod>("month");
   const [salesGroups, setSalesGroups] = useState<SalesGroup[]>([]);
@@ -59,6 +65,12 @@ function App() {
   const [report, setReport] = useState<ReportResult | null>(null);
   const [reportMessage, setReportMessage] = useState("");
   const [, setReportLoading] = useState(false);
+  const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null);
+  const [inventoryWarehouses, setInventoryWarehouses] = useState<InventoryWarehouse[]>([]);
+  const [inventoryProducts, setInventoryProducts] = useState<InventoryProduct[]>([]);
+  const [inventoryOutOfStock, setInventoryOutOfStock] = useState<InventoryProduct[]>([]);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [inventoryMessage, setInventoryMessage] = useState("");
 
   const apiFetch = (url: string, init: RequestInit = {}) => fetch(url, {
     ...init, headers: { ...(init.headers ?? {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -68,6 +80,16 @@ function App() {
     fetch(`${API_URL}/health`).then((response) => response.ok ? response.json() : Promise.reject())
       .then(() => setApiStatus("API connected")).catch(() => setApiStatus("API unavailable"));
   }, []);
+
+  useEffect(() => {
+    const handleHashChange = () => setShowAccess(window.location.hash === "#access");
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
+  useEffect(() => {
+    if (token) setShowAccess(true);
+  }, [token]);
 
   useEffect(() => {
     if (!token) { setCurrentUser(null); setHistory([]); setStats(null); setMasterItems([]); return; }
@@ -96,6 +118,33 @@ function App() {
     else setMasterMessage("Master data could not be loaded.");
   };
 
+  const refreshInventory = async () => {
+    if (!token) return;
+    setInventoryLoading(true);
+    setInventoryMessage("");
+    setInventorySummary(null);
+    setInventoryWarehouses([]);
+    setInventoryProducts([]);
+    setInventoryOutOfStock([]);
+    try {
+      const [summaryResponse, warehouseResponse, productResponse, outOfStockResponse] = await Promise.all([
+        apiFetch(`${API_URL}/api/v1/inventory/summary`),
+        apiFetch(`${API_URL}/api/v1/inventory/by-warehouse?limit=5`),
+        apiFetch(`${API_URL}/api/v1/inventory/by-product?limit=50&sort=quantity&order=desc`),
+        apiFetch(`${API_URL}/api/v1/inventory/by-product?limit=10&status=out_of_stock&sort=code&order=asc`),
+      ]);
+      if (!summaryResponse.ok || !warehouseResponse.ok || !productResponse.ok || !outOfStockResponse.ok) throw new Error("Inventory unavailable");
+      setInventorySummary(await summaryResponse.json());
+      setInventoryWarehouses(await warehouseResponse.json());
+      setInventoryProducts(await productResponse.json());
+      setInventoryOutOfStock(await outOfStockResponse.json());
+    } catch {
+      setInventoryMessage("Inventory intelligence could not be loaded. Please retry.");
+    } finally {
+      setInventoryLoading(false);
+    }
+  };
+
   const refreshAnalytics = async () => {
     if (!token) return;
     setAnalyticsLoading(true);
@@ -107,18 +156,18 @@ function App() {
     setSalesGroups([]);
     const analyticsParams = new URLSearchParams();
     const groupParams = new URLSearchParams({ group_by: analyticsGroupBy, period: analyticsPeriod, limit: "20" });
-    if (analyticsDateFrom) {
-      analyticsParams.set("date_from", analyticsDateFrom);
-      groupParams.set("date_from", analyticsDateFrom);
+    if (appliedDateFrom) {
+      analyticsParams.set("date_from", appliedDateFrom);
+      groupParams.set("date_from", appliedDateFrom);
     }
-    if (analyticsDateTo) {
-      analyticsParams.set("date_to", analyticsDateTo);
-      groupParams.set("date_to", analyticsDateTo);
+    if (appliedDateTo) {
+      analyticsParams.set("date_to", appliedDateTo);
+      groupParams.set("date_to", appliedDateTo);
     }
     const query = analyticsParams.toString();
     const trendParams = new URLSearchParams({ period: analyticsPeriod });
-    if (analyticsDateFrom) trendParams.set("date_from", analyticsDateFrom);
-    if (analyticsDateTo) trendParams.set("date_to", analyticsDateTo);
+    if (appliedDateFrom) trendParams.set("date_from", appliedDateFrom);
+    if (appliedDateTo) trendParams.set("date_to", appliedDateTo);
     const responses = await Promise.all([
       apiFetch(`${API_URL}/api/v1/analytics/summary${query ? `?${query}` : ""}`),
       apiFetch(`${API_URL}/api/v1/analytics/sales/trend?${trendParams.toString()}`),
@@ -183,7 +232,13 @@ function App() {
   };
 
   useEffect(() => { refreshMasterData(); }, [token, masterType]);
-  useEffect(() => { refreshAnalytics(); }, [token, analyticsGroupBy, analyticsPeriod, analyticsDateFrom, analyticsDateTo]);
+  useEffect(() => { refreshInventory(); }, [token]);
+  const applyAnalyticsFilters = () => {
+    setAppliedDateFrom(analyticsDateFrom);
+    setAppliedDateTo(analyticsDateTo);
+  };
+
+  useEffect(() => { refreshAnalytics(); }, [token, analyticsGroupBy, analyticsPeriod, appliedDateFrom, appliedDateTo]);
 
   useEffect(() => {
     if (!job || ["completed", "failed", "cancelled"].includes(job.status)) return;
@@ -242,13 +297,78 @@ function App() {
 
   const signOut = async () => {
     if (token) await apiFetch(`${API_URL}/api/v1/auth/logout`, { method: "POST" });
-    window.localStorage.removeItem("mosaic_access_token"); setToken(""); setCurrentUser(null); setJob(null);
+    window.localStorage.removeItem("mosaic_access_token"); setToken(""); setCurrentUser(null); setJob(null); setShowAccess(false); window.history.replaceState(null, "", window.location.pathname);
   };
   const maxTrendRevenue = Math.max(1, ...analyticsTrend.map((item) => Number(item.revenue)));
+  const inventoryDashboard = token && (
+    <section className="inventory-dashboard" id="inventory" aria-labelledby="inventory-title">
+      <div className="dashboard-heading">
+        <div><p className="eyebrow">Inventory intelligence</p><h1 id="inventory-title">Current inventory position</h1><p className="dashboard-subtitle">See what is available, where it is held, and which products need attention.</p></div>
+        <button className="button button-gold" type="button" onClick={refreshInventory} disabled={inventoryLoading}>{inventoryLoading ? "Refreshing..." : "Refresh inventory"}</button>
+      </div>
+      {inventoryMessage && <div className="dashboard-alert" role="alert">{inventoryMessage}<button className="text-link" type="button" onClick={refreshInventory}>Retry</button></div>}
+      {inventoryLoading ? <div className="dashboard-loading-card" role="status">Loading inventory intelligence...</div> : inventorySummary && <>
+        <div className="dashboard-kpis inventory-kpis">
+          <article className="dashboard-kpi"><span>Total inventory units</span><strong>{String(inventorySummary.total_inventory_units)}</strong><small>Latest position by product and warehouse</small></article>
+          <article className="dashboard-kpi"><span>Products with inventory</span><strong>{inventorySummary.products_with_inventory}</strong><small>Products with units available</small></article>
+          <article className="dashboard-kpi"><span>Warehouses with inventory</span><strong>{inventorySummary.warehouses_with_inventory}</strong><small>Locations holding available units</small></article>
+          <article className="dashboard-kpi inventory-attention"><span>Out of stock products</span><strong>{inventorySummary.out_of_stock_products}</strong><small>Products with no available units</small></article>
+        </div>
+        {Number(inventorySummary.total_inventory_units) === 0 && inventorySummary.out_of_stock_products === 0 ? <div className="dashboard-empty" role="status"><strong>No inventory data available</strong><span>Import inventory snapshots from Data intake to build this position.</span><a className="button button-dark" href="#ingestion">Go to data intake</a></div> : <div className="inventory-grid">
+          <section className="dashboard-panel" aria-labelledby="inventory-warehouse-title"><div className="panel-heading"><div><p className="eyebrow">Distribution</p><h2 id="inventory-warehouse-title">Inventory by warehouse</h2></div><span className="panel-meta">Current</span></div>{inventoryWarehouses.length === 0 ? <p className="panel-empty">No warehouse inventory is available.</p> : <div className="inventory-ranking">{inventoryWarehouses.map((item) => <div className="inventory-ranking-row" key={item.warehouse_id}><div className="inventory-row-label"><strong>{item.warehouse_name}</strong><small>{item.warehouse_code} · {item.product_count} products</small></div><div className="inventory-bar"><span style={{ width: `${Math.max(4, Number(item.total_quantity) / Math.max(1, ...inventoryWarehouses.map((warehouse) => Number(warehouse.total_quantity))) * 100)}%` }} /></div><b>{String(item.total_quantity)}</b><span className={`inventory-status ${item.status}`}>{item.status === "in_stock" ? "In stock" : "Out of stock"}</span></div>)}</div>}</section>
+          <section className="dashboard-panel" aria-labelledby="out-of-stock-title"><div className="panel-heading"><div><p className="eyebrow">Attention</p><h2 id="out-of-stock-title">Out of stock</h2></div><span className="panel-meta">{inventoryOutOfStock.length}</span></div>{inventoryOutOfStock.length === 0 ? <p className="panel-empty inventory-healthy">Inventory position looks healthy.</p> : <div className="dashboard-table">{inventoryOutOfStock.map((item) => <div className="dashboard-table-row" key={item.product_id}><span className="inventory-status-icon" aria-hidden="true">!</span><div><strong>{item.product_name}</strong><small>{item.product_code} · {item.warehouse_count} warehouses</small></div><span className="inventory-status out_of_stock">Out of stock</span></div>)}</div>}</section>
+        </div>}
+        <section className="dashboard-panel inventory-products-panel" aria-labelledby="inventory-products-title"><div className="panel-heading"><div><p className="eyebrow">Product position</p><h2 id="inventory-products-title">Inventory by product</h2></div><span className="panel-meta">Top 50</span></div>{inventoryProducts.length === 0 ? <p className="panel-empty">No products match the current inventory position.</p> : <div className="dashboard-table inventory-product-table"><div className="inventory-table-header"><span>Product</span><span>Quantity</span><span>Warehouses</span><span>Status</span></div>{inventoryProducts.map((item) => <div className="inventory-product-row" key={item.product_id}><div><strong>{item.product_name}</strong><small>{item.product_code}</small></div><b>{String(item.total_quantity)}</b><span>{item.warehouse_count}</span><span className={`inventory-status ${item.status}`}>{item.status === "in_stock" ? "In stock" : "Out of stock"}</span></div>)}</div>}</section>
+      </>}
+    </section>
+  );
+  const decisionDashboard = token && (
+    <section className="decision-dashboard" id="decision-overview" aria-labelledby="decision-overview-title">
+      <div className="dashboard-heading">
+        <div>
+          <p className="eyebrow">Decision intelligence</p>
+          <h1 id="decision-overview-title">Overview</h1>
+          <p className="dashboard-subtitle">A clear view of what is happening across your business.</p>
+        </div>
+        <button className="button button-gold" type="button" onClick={refreshAnalytics} disabled={analyticsLoading}>
+          {analyticsLoading ? "Refreshing..." : "Refresh data"}
+        </button>
+      </div>
+      <div className="dashboard-filters" aria-label="Dashboard filters">
+        <label>From<input type="date" value={analyticsDateFrom} onChange={(event) => setAnalyticsDateFrom(event.target.value)} /></label>
+        <label>To<input type="date" value={analyticsDateTo} onChange={(event) => setAnalyticsDateTo(event.target.value)} /></label>
+        <label>Trend<select value={analyticsPeriod} onChange={(event) => setAnalyticsPeriod(event.target.value as AnalyticsPeriod)}><option value="day">Daily</option><option value="week">Weekly</option><option value="month">Monthly</option></select></label>
+        <button className="button button-dark filter-apply" type="button" onClick={applyAnalyticsFilters} disabled={analyticsLoading}>Apply</button>
+      </div>
+      {analyticsMessage && <div className="dashboard-alert" role="alert">{analyticsMessage}<button className="text-link" type="button" onClick={refreshAnalytics}>Retry</button></div>}
+      {analyticsLoading ? <div className="dashboard-loading-card" role="status">Loading your decision data...</div> : !analyticsSummary ? <div className="dashboard-empty" role="status"><strong>No sales data available</strong><span>Upload a sales-history CSV from Data intake to populate this overview.</span><a className="button button-dark" href="#ingestion">Go to data intake</a></div> : <>
+        <div className="dashboard-kpis">
+          <article className="dashboard-kpi"><span>Total revenue</span><strong>{String(analyticsSummary.total_revenue)}</strong><small>Selected period</small></article>
+          <article className="dashboard-kpi"><span>Transactions</span><strong>{analyticsSummary.sales_count}</strong><small>Completed sales records</small></article>
+          <article className="dashboard-kpi"><span>Units sold</span><strong>{String(analyticsSummary.total_quantity)}</strong><small>Quantity across sales</small></article>
+          <article className="dashboard-kpi"><span>Average sale value</span><strong>{String(analyticsSummary.average_sale_value)}</strong><small>Revenue per transaction</small></article>
+        </div>
+        <div className="dashboard-main-grid">
+          <section className="dashboard-panel dashboard-trend-panel" aria-labelledby="revenue-trend-title">
+            <div className="panel-heading"><div><p className="eyebrow">Performance</p><h2 id="revenue-trend-title">Revenue trend</h2></div><span className="panel-meta">{analyticsPeriod}</span></div>
+            {analyticsTrend.length === 0 ? <p className="panel-empty">No revenue recorded for this period.</p> : <div className="dashboard-chart" role="img" aria-label="Revenue by period">{analyticsTrend.map((item) => <div className="chart-column" key={item.period}><div className="chart-value">{String(item.revenue)}</div><div className="chart-track"><span style={{ height: `${Math.max(6, Number(item.revenue) / maxTrendRevenue * 100)}%` }} /></div><small>{item.period}</small></div>)}</div>}
+          </section>
+          <section className="dashboard-panel insight-panel" aria-labelledby="insights-title"><div className="panel-heading"><div><p className="eyebrow">Signals</p><h2 id="insights-title">At a glance</h2></div></div><div className="insight-row"><span className="status-dot green" /><div><strong>{topProducts[0]?.product_name ?? topProducts[0]?.product_code ?? "No product data"}</strong><small>Top product by revenue</small></div></div><div className="insight-row"><span className="status-dot yellow" /><div><strong>{warehousePerformance[0]?.warehouse_name ?? warehousePerformance[0]?.warehouse_code ?? "No warehouse data"}</strong><small>Leading warehouse by revenue</small></div></div><div className="insight-row"><span className="status-dot blue" /><div><strong>{String(analyticsSummary.inventory_quantity)}</strong><small>Current inventory quantity</small></div></div></section>
+        </div>
+        <div className="dashboard-main-grid dashboard-tables-grid">
+          <section className="dashboard-panel" aria-labelledby="top-products-title"><div className="panel-heading"><div><p className="eyebrow">Product performance</p><h2 id="top-products-title">Top products</h2></div><span className="panel-meta">Top 5</span></div>{topProducts.length === 0 ? <p className="panel-empty">No products match this period.</p> : <div className="dashboard-table">{topProducts.map((item) => <div className="dashboard-table-row" key={item.product_code}><span className="rank">{item.rank}</span><div><strong>{item.product_name ?? item.product_code}</strong><small>{String(item.quantity_sold)} units · {item.sales_count} transactions</small></div><b>{String(item.revenue)}</b></div>)}</div>}</section>
+          <section className="dashboard-panel" aria-labelledby="warehouse-performance-title"><div className="panel-heading"><div><p className="eyebrow">Distribution performance</p><h2 id="warehouse-performance-title">Warehouses</h2></div><span className="panel-meta">Top 5</span></div>{warehousePerformance.length === 0 ? <p className="panel-empty">No warehouses match this period.</p> : <div className="dashboard-table">{warehousePerformance.map((item) => <div className="dashboard-table-row" key={item.warehouse_code}><span className="rank">{item.rank}</span><div><strong>{item.warehouse_name ?? item.warehouse_code}</strong><small>{String(item.quantity_sold)} units · {item.sales_count} transactions</small></div><b>{String(item.revenue)}</b></div>)}</div>}</section>
+        </div>
+      </>}
+    </section>
+  );
 
-  return <div className="app-shell">
+  return <div className={`${token ? "app-shell workspace-shell" : "app-shell"}${showAccess ? " access-open" : ""}`}>
+    {token && <aside className="workspace-sidebar" aria-label="Workspace navigation"><a className="sidebar-brand" href="#overview">MOSAIC<span>.</span></a><p className="sidebar-label">Workspace</p><nav className="sidebar-nav"><a className="sidebar-active" href="#overview"><span>⌂</span>Overview</a><a href="#inventory"><span>▧</span>Inventory</a><a href="#ingestion"><span>↥</span>Data intake</a><a href="#operations"><span>▦</span>Operations</a><a href="#analytics"><span>◒</span>Analytics</a><a href="#reports"><span>▤</span>Reports</a></nav><div className="sidebar-footer"><span className="sidebar-avatar">{currentUser?.name?.slice(0, 1).toUpperCase() ?? "M"}</span><div><strong>{currentUser?.name ?? "Workspace"}</strong><small>{currentUser?.email ?? "Tenant workspace"}</small></div><button className="sidebar-signout" type="button" onClick={signOut} aria-label="Sign out">↗</button></div></aside>}
     <header className="topbar"><a className="brand" href="/">MOSAIC<span>.</span></a><nav><a className="active" href="#overview">Overview</a><a href="#ingestion">Data intake</a><a href="#operations">Operations</a>{token && <><a href="#analytics">Analytics</a><a href="#reports">Reports</a></>}</nav><div className="topbar-actions"><span className="connection"><i /> {apiStatus}</span>{token ? <><span className="user-label">{currentUser?.name ?? "Workspace"}</span><button className="button button-ghost" onClick={signOut}>Sign out</button></> : <a className="button button-gold" href="#access">Get started</a>}</div></header>
     <main>
+      {decisionDashboard}
+      {inventoryDashboard}
       {token && <div className="dashboard-toolbar" aria-live="polite"><label>Trend period<select value={analyticsPeriod} onChange={(event) => setAnalyticsPeriod(event.target.value as AnalyticsPeriod)}><option value="day">Daily</option><option value="week">Weekly</option><option value="month">Monthly</option></select></label>{analyticsLoading && <span className="dashboard-loading">Refreshing decision data…</span>}</div>}
       {token && <section className="operations-section analytics-query" id="sales-query"><div className="operations-heading"><div><p className="eyebrow">Sales query</p><h2>Explore grouped performance</h2></div><button className="button button-ghost" type="button" onClick={refreshAnalytics}>Refresh</button></div><div className="report-filters"><label>Group by<select value={analyticsGroupBy} onChange={(event) => setAnalyticsGroupBy(event.target.value as AnalyticsGroupBy)}><option value="product">Product</option><option value="warehouse">Warehouse</option><option value="date">Date</option></select></label><label>From<input type="date" value={analyticsDateFrom} onChange={(event) => setAnalyticsDateFrom(event.target.value)} /></label><label>To<input type="date" value={analyticsDateTo} onChange={(event) => setAnalyticsDateTo(event.target.value)} /></label></div>{salesGroups.length === 0 ? <p className="empty-state">No grouped sales match these filters.</p> : <div className="history-list">{salesGroups.map((item) => <article className="history-row" key={item.key}><div><strong>{item.label ?? item.key}</strong><small>{item.sales_count} transactions · {String(item.total_quantity)} units</small></div><span>{String(item.total_revenue)}</span></article>)}</div>}</section>}
       <section className="hero" id="overview"><div className="hero-copy"><p className="eyebrow">Supply-chain decision intelligence</p><h1>Make every supply decision <em>clearer.</em></h1><p className="hero-text">MOSAIC connects the signals across your supply chain so your team can see what is happening, understand why, and act with confidence.</p><div className="hero-actions"><a className="button button-gold" href="#access">Enter your workspace <span>→</span></a><a className="text-link" href="#ingestion">Explore data intake <span>↗</span></a></div></div><div className="hero-art" aria-hidden="true"><div className="art-grid" /><div className="art-orbit orbit-one" /><div className="art-orbit orbit-two" /><div className="art-node node-one" /><div className="art-node node-two" /><div className="art-node node-three" /><div className="art-label label-one">DEMAND</div><div className="art-label label-two">SUPPLY</div><div className="art-label label-three">ACTION</div></div></section>

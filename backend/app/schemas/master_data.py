@@ -1,6 +1,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -108,3 +109,43 @@ class InventoryResponse(InventoryCreate):
     id: uuid.UUID
     created_at: datetime
     updated_at: datetime
+
+
+class InventoryStatus(StrEnum):
+    IN_STOCK = "in_stock"
+    OUT_OF_STOCK = "out_of_stock"
+
+
+class InventoryIntelligenceQuery(BaseModel):
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=50, ge=1, le=100)
+    search: str | None = Field(default=None, max_length=100)
+    warehouse_id: uuid.UUID | None = None
+    status: InventoryStatus | None = None
+    sort: str = "quantity"
+    order: str = Field(default="desc", pattern="^(asc|desc)$")
+
+
+class InventorySummaryResponse(BaseModel):
+    total_inventory_units: Decimal
+    products_with_inventory: int
+    warehouses_with_inventory: int
+    out_of_stock_products: int
+
+
+class InventoryWarehouseInsight(BaseModel):
+    warehouse_id: uuid.UUID
+    warehouse_code: str
+    warehouse_name: str
+    total_quantity: Decimal
+    product_count: int
+    status: InventoryStatus
+
+
+class InventoryProductInsight(BaseModel):
+    product_id: uuid.UUID
+    product_code: str
+    product_name: str
+    total_quantity: Decimal
+    warehouse_count: int
+    status: InventoryStatus

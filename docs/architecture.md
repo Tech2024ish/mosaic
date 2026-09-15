@@ -102,3 +102,9 @@ All filters and aggregates apply `current_user.organization_id` in the database 
 ## Phase 13 decision intelligence overview
 
 The authenticated Overview dashboard composes the existing analytics endpoints for KPI cards, date-filtered revenue trends, top products, warehouse performance, and grouped sales exploration. It issues concurrent tenant-scoped requests and keeps aggregation in PostgreSQL. Loading, empty, validation, and API-failure states are handled in the existing React shell. No new backend endpoint, database table, migration, chart dependency, or authentication mechanism was introduced.
+
+## Phase 14 inventory intelligence
+
+Inventory Intelligence is a read-only application layer over `inventory_snapshots`, `products`, and `warehouses`. The service derives current position in SQL by selecting the latest snapshot date for each tenant/product/warehouse pair, then aggregates quantities by product and warehouse. `GET /api/v1/inventory/summary`, `/by-warehouse`, and `/by-product` remain behind the existing bearer/session dependency and apply `current_user.organization_id` in every query.
+
+The API uses bounded offset/limit pagination and explicit search, status, and sort inputs. Status is limited to `in_stock` and `out_of_stock`; low-stock logic is intentionally absent because no threshold exists in the current domain model. The frontend adds an Inventory navigation destination and renders current-position KPIs, warehouse distribution, product inventory, and out-of-stock visibility without introducing a second API client or a new database/migration layer.

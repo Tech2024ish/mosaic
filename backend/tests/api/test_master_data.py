@@ -181,3 +181,71 @@ def test_inventory_csv_import_resolves_tenant_owned_references() -> None:
     assert job["status"] == "completed"
     assert job["successful_rows"] == 1
     assert len(client.get("/api/v1/inventory", headers=headers).json()) >= 1
+
+
+def test_inventory_intelligence_is_current_and_tenant_scoped() -> None:
+    client = TestClient(app)
+    _, first_headers = account(client)
+    _, second_headers = account(client)
+    product = client.post(
+        "/api/v1/products",
+        json={"product_code": "P-CURRENT", "name": "Current Product"},
+        headers=first_headers,
+    ).json()
+    empty_product = client.post(
+        "/api/v1/products",
+        json={"product_code": "P-EMPTY", "name": "Empty Product"},
+        headers=first_headers,
+    ).json()
+    warehouse = client.post(
+        "/api/v1/warehouses",
+        json={"warehouse_code": "W-CURRENT", "name": "Current Warehouse"},
+        headers=first_headers,
+    ).json()
+    for snapshot_date, quantity in (("2026-01-01", 3), ("2026-02-01", 12)):
+        assert (
+            client.post(
+                "/api/v1/inventory",
+                json={
+                    "product_id": product["id"],
+                    "warehouse_id": warehouse["id"],
+                    "snapshot_date": snapshot_date,
+                    "quantity_on_hand": quantity,
+                },
+                headers=first_headers,
+            ).status_code
+            == 201
+        )
+
+    summary = client.get("/api/v1/inventory/summary", headers=first_headers)
+    assert summary.status_code == 200
+    assert summary.json() == {
+        "total_inventory_units": "12.0000",
+        "products_with_inventory": 1,
+        "warehouses_with_inventory": 1,
+        "out_of_stock_products": 1,
+    }
+    warehouses = client.get("/api/v1/inventory/by-warehouse", headers=first_headers)
+    assert warehouses.status_code == 200
+    assert warehouses.json()[0]["total_quantity"] == "12.0000"
+    products = client.get(
+        "/api/v1/inventory/by-product?status=out_of_stock&sort=code", headers=first_headers
+    )
+    assert products.status_code == 200
+    assert products.json()[0]["product_id"] == empty_product["id"]
+    assert client.get("/api/v1/inventory/summary", headers=second_headers).json() == {
+        "total_inventory_units": "0",
+        "products_with_inventory": 0,
+        "warehouses_with_inventory": 0,
+        "out_of_stock_products": 0,
+    }
+
+
+def test_inventory_intelligence_rejects_unbounded_or_unknown_sort() -> None:
+    client = TestClient(app)
+    assert client.get("/api/v1/inventory/summary").status_code == 401
+    _, headers = account(client)
+    assert client.get("/api/v1/inventory/by-product?limit=101", headers=headers).status_code == 422
+    assert (
+        client.get("/api/v1/inventory/by-product?sort=secret", headers=headers).status_code == 422
+    )

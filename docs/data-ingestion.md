@@ -104,3 +104,9 @@ The analytics query reads normalized `sales_history` records and does not create
 ## Phase 13 dashboard usage
 
 The authenticated Overview uses the analytics query and existing trend/ranking endpoints to present decision KPIs and grouped performance. Select start/end dates and a day, week, or month trend period; the selected filters are sent to the backend, which validates the range and performs tenant-scoped aggregation. Tenants with no matching sales receive an empty state rather than fabricated metrics.
+
+## Phase 14 inventory intelligence
+
+The Inventory Intelligence workspace reads the existing inventory snapshot history and presents the latest current position per product and warehouse. Its APIs are `GET /api/v1/inventory/summary`, `GET /api/v1/inventory/by-warehouse?offset=0&limit=50&search=...`, and `GET /api/v1/inventory/by-product?offset=0&limit=50&search=...&warehouse_id=...&status=in_stock|out_of_stock&sort=code|name|quantity|warehouses&order=asc|desc`.
+
+All inputs are bounded and tenant-scoped. A product is `in_stock` when its summed latest quantity is greater than zero; otherwise it is `out_of_stock`. Warehouses use the same current-position rule. The system does not claim low-stock status because products do not currently carry a reorder threshold. Historical snapshots remain available through the existing `/api/v1/inventory` endpoint and are never overwritten by the intelligence view.

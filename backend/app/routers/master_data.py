@@ -13,7 +13,11 @@ from app.models.warehouse import Warehouse
 from app.schemas.business_data import BusinessQuery, InventoryQuery
 from app.schemas.master_data import (
     InventoryCreate,
+    InventoryIntelligenceQuery,
+    InventoryProductInsight,
     InventoryResponse,
+    InventorySummaryResponse,
+    InventoryWarehouseInsight,
     ProductCreate,
     ProductResponse,
     ProductUpdate,
@@ -34,6 +38,9 @@ from app.services.master_data_service import (
     get_product,
     get_supplier,
     get_warehouse,
+    inventory_by_product,
+    inventory_by_warehouse,
+    inventory_summary,
     list_inventory,
     list_products,
     list_suppliers,
@@ -241,6 +248,48 @@ def inventory(
         query.snapshot_date_from,
         query.snapshot_date_to,
         validate_sort(query.sort, {"snapshot_date", "created_at", "quantity"}),
+        query.order == "desc",
+    )
+
+
+@router.get("/inventory/summary", response_model=InventorySummaryResponse)
+def inventory_summary_get(
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> InventorySummaryResponse:
+    return inventory_summary(db, user.organization_id)
+
+
+@router.get("/inventory/by-warehouse", response_model=list[InventoryWarehouseInsight])
+def inventory_by_warehouse_get(
+    query: BusinessQuery = Depends(),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[InventoryWarehouseInsight]:
+    return inventory_by_warehouse(
+        db,
+        user.organization_id,
+        query.offset,
+        query.limit,
+        query.search,
+        query.order == "desc",
+    )
+
+
+@router.get("/inventory/by-product", response_model=list[InventoryProductInsight])
+def inventory_by_product_get(
+    query: InventoryIntelligenceQuery = Depends(),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[InventoryProductInsight]:
+    return inventory_by_product(
+        db,
+        user.organization_id,
+        query.offset,
+        query.limit,
+        query.search,
+        query.warehouse_id,
+        query.status,
+        validate_sort(query.sort, {"code", "name", "quantity", "warehouses"}),
         query.order == "desc",
     )
 

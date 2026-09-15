@@ -177,3 +177,9 @@ Reports compose the Phase 10 analytics layer into reusable business outputs:
 - `GET /api/v1/reports/{sales|products|inventory|warehouses}/export?format=csv`
 
 Reports accept validated date, product, warehouse, period, and bounded limit filters. CSV exports use stable UTF-8 columns, safe generated filenames, tenant-scoped database queries, and streaming responses. Sales and inventory exports are capped by `REPORT_EXPORT_MAX_ROWS` (50,000 by default); aggregate product and warehouse exports remain bounded by the report limit. No PDF, Excel, persistent report files, or separate reporting database was introduced.
+
+## Phase 14 inventory intelligence
+
+The authenticated workspace includes an Inventory Intelligence view built on the existing historical `inventory_snapshots` model. `GET /api/v1/inventory/summary` reports current total units, products with available units, warehouses holding available units, and products with no available units. `GET /api/v1/inventory/by-warehouse` and `GET /api/v1/inventory/by-product` provide bounded, tenant-scoped current-position views with search, status filtering, and whitelisted sorting.
+
+Current position means the latest snapshot for each organization/product/warehouse combination. The platform exposes `in_stock` and `out_of_stock` only; no low-stock threshold is fabricated because the schema has no reorder-level policy. No migration was required. The frontend Inventory Intelligence page uses the authenticated API client and keeps loading, empty, retry, and responsive states consistent with the Overview workspace.
