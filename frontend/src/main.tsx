@@ -1,5 +1,6 @@
 import { type ChangeEvent, type FormEvent, StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { PublicFeatures, PublicFooter, PublicHome } from "./components/PublicHome";
 import "./styles.css";
 
 const API_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
@@ -9,7 +10,9 @@ type ImportError = { row_number: number; message: string; field_name: string | n
 type CurrentUser = { id: string; email: string; name: string; organization_id: string; is_active: boolean };
 type ImportStats = { total_imports: number; successful_imports: number; failed_imports: number; cancelled_imports: number; retry_count: number; total_rows: number; successful_rows: number; failed_rows: number };
 type ImportEvent = { id: string; event_type: string; actor_id: string | null; created_at: string };
-type DatasetType = "sales_history" | "products" | "warehouses" | "suppliers" | "inventory_snapshots";
+type ImportAttempt = { id: string; attempt_number: number; status: string; failure_category: string | null; started_at: string; completed_at: string | null; duration_ms: number | null };
+type DatasetType = "sales_history" | "products" | "warehouses" | "suppliers" | "inventory_snapshots" | "inventory";
+type MasterCreateType = "products" | "warehouses" | "suppliers" | "inventory";
 type MasterItem = Record<string, string | number | boolean | null>;
 type AnalyticsValue = number | string;
 type AnalyticsSummary = { sales_count: number; total_quantity: AnalyticsValue; total_revenue: AnalyticsValue; average_sale_value: AnalyticsValue; product_count: number; warehouse_count: number; supplier_count: number; inventory_quantity: AnalyticsValue; inventory_record_count: number };
@@ -31,6 +34,9 @@ function App() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [token, setToken] = useState(() => window.localStorage.getItem("mosaic_access_token") ?? "");
   const [showAccess, setShowAccess] = useState(() => window.location.hash === "#access");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -39,13 +45,28 @@ function App() {
   const [job, setJob] = useState<Job | null>(null);
   const [errors, setErrors] = useState<ImportError[]>([]);
   const [events, setEvents] = useState<ImportEvent[]>([]);
+  const [attempts, setAttempts] = useState<ImportAttempt[]>([]);
   const [message, setMessage] = useState("");
   const [history, setHistory] = useState<Job[]>([]);
   const [stats, setStats] = useState<ImportStats | null>(null);
   const [datasetType, setDatasetType] = useState<DatasetType>("sales_history");
   const [masterType, setMasterType] = useState<DatasetType>("products");
+  const [masterCreateType, setMasterCreateType] = useState<MasterCreateType>("products");
   const [masterItems, setMasterItems] = useState<MasterItem[]>([]);
   const [masterMessage, setMasterMessage] = useState("");
+  const [masterCreateMessage, setMasterCreateMessage] = useState("");
+  const [editingMaster, setEditingMaster] = useState<MasterItem | null>(null);
+  const [masterEditName, setMasterEditName] = useState("");
+  const [masterEditActive, setMasterEditActive] = useState(true);
+  const [masterCode, setMasterCode] = useState("");
+  const [masterName, setMasterName] = useState("");
+  const [inventoryProductId, setInventoryProductId] = useState("");
+  const [inventoryWarehouseId, setInventoryWarehouseId] = useState("");
+  const [inventorySnapshotDate, setInventorySnapshotDate] = useState("");
+  const [inventoryQuantity, setInventoryQuantity] = useState("");
+  const [inventoryUnitCost, setInventoryUnitCost] = useState("");
+  const [productReferences, setProductReferences] = useState<MasterItem[]>([]);
+  const [warehouseReferences, setWarehouseReferences] = useState<MasterItem[]>([]);
   const [analyticsSummary, setAnalyticsSummary] = useState<AnalyticsSummary | null>(null);
   const [analyticsTrend, setAnalyticsTrend] = useState<TrendItem[]>([]);
   const [topProducts, setTopProducts] = useState<RankedItem[]>([]);
@@ -116,6 +137,16 @@ function App() {
     const response = await apiFetch(`${API_URL}/api/v1/${endpoint}?limit=50`);
     if (response.ok) { setMasterItems(await response.json()); setMasterMessage(""); }
     else setMasterMessage("Master data could not be loaded.");
+  };
+
+  const refreshMasterReferences = async () => {
+    if (!token) return;
+    const [productsResponse, warehousesResponse] = await Promise.all([
+      apiFetch(`${API_URL}/api/v1/products?limit=100`),
+      apiFetch(`${API_URL}/api/v1/warehouses?limit=100`),
+    ]);
+    if (productsResponse.ok) setProductReferences(await productsResponse.json());
+    if (warehousesResponse.ok) setWarehouseReferences(await warehousesResponse.json());
   };
 
   const refreshInventory = async () => {
@@ -232,6 +263,7 @@ function App() {
   };
 
   useEffect(() => { refreshMasterData(); }, [token, masterType]);
+  useEffect(() => { refreshMasterReferences(); }, [token]);
   useEffect(() => { refreshInventory(); }, [token]);
   const applyAnalyticsFilters = () => {
     setAppliedDateFrom(analyticsDateFrom);
@@ -252,6 +284,7 @@ function App() {
   const authenticate = async (event: FormEvent) => {
     event.preventDefault(); setAuthMessage("");
     if (authMode === "register") {
+      if (password !== confirmPassword) { setAuthMessage("Passwords do not match."); return; }
       const registration = await fetch(`${API_URL}/api/v1/auth/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, name, password }) });
       if (!registration.ok) { setAuthMessage("Registration could not be completed."); return; }
     }
@@ -259,6 +292,10 @@ function App() {
     if (!response.ok) { setAuthMessage("Check your email and password, then try again."); return; }
     const result = await response.json(); window.localStorage.setItem("mosaic_access_token", result.access_token); setToken(result.access_token);
     setAuthMessage(authMode === "register" ? "Workspace created" : "Signed in successfully");
+  };
+
+  const startGoogleSignIn = () => {
+    setAuthMessage("Google sign-in is not configured for this MOSAIC deployment.");
   };
 
   const submitImport = async (event: FormEvent) => {
@@ -269,13 +306,49 @@ function App() {
     setJob(await response.json()); await refreshOperations();
   };
 
+  const createMasterRecord = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!token) return;
+    setMasterCreateMessage("");
+    const endpoint = masterCreateType;
+    const payload = masterCreateType === "products" ? { product_code: masterCode, name: masterName }
+      : masterCreateType === "warehouses" ? { warehouse_code: masterCode, name: masterName }
+        : masterCreateType === "suppliers" ? { supplier_code: masterCode, name: masterName }
+          : { product_id: inventoryProductId, warehouse_id: inventoryWarehouseId, snapshot_date: inventorySnapshotDate, quantity_on_hand: inventoryQuantity, ...(inventoryUnitCost ? { unit_cost: inventoryUnitCost } : {}) };
+    try {
+      const response = await apiFetch(`${API_URL}/api/v1/${endpoint}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (!response.ok) { setMasterCreateMessage("Record could not be saved. Check the supplied values."); return; }
+      setMasterCreateMessage("Record saved.");
+      setMasterCode(""); setMasterName(""); setInventoryQuantity(""); setInventoryUnitCost("");
+      await Promise.all([refreshMasterData(), refreshMasterReferences()]);
+    } catch { setMasterCreateMessage("Record could not be saved because the API is unavailable."); }
+  };
+
+  const beginMasterEdit = (item: MasterItem) => {
+    setEditingMaster(item);
+    setMasterEditName(String(item.name ?? ""));
+    setMasterEditActive(Boolean(item.is_active));
+    setMasterCreateMessage("");
+  };
+
+  const updateMasterRecord = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!token || !editingMaster || !["products", "warehouses", "suppliers"].includes(masterType)) return;
+    const response = await apiFetch(`${API_URL}/api/v1/${masterType}/${String(editingMaster.id)}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: masterEditName, is_active: masterEditActive }),
+    });
+    if (!response.ok) { setMasterCreateMessage("Record could not be updated."); return; }
+    setEditingMaster(null); setMasterCreateMessage("Record updated."); await Promise.all([refreshMasterData(), refreshMasterReferences()]);
+  };
+
   const inspectImport = async (selected: Job) => {
     setJob(selected);
-    const [errorsResponse, eventsResponse] = await Promise.all([
-      apiFetch(`${API_URL}/api/v1/imports/${selected.id}/errors`), apiFetch(`${API_URL}/api/v1/imports/${selected.id}/events`),
+    const [errorsResponse, eventsResponse, attemptsResponse] = await Promise.all([
+      apiFetch(`${API_URL}/api/v1/imports/${selected.id}/errors`), apiFetch(`${API_URL}/api/v1/imports/${selected.id}/events`), apiFetch(`${API_URL}/api/v1/imports/${selected.id}/attempts`),
     ]);
     setErrors(errorsResponse.ok ? await errorsResponse.json() : []);
     setEvents(eventsResponse.ok ? await eventsResponse.json() : []);
+    setAttempts(attemptsResponse.ok ? await attemptsResponse.json() : []);
   };
 
   const retryImport = async (selected: Job) => {
@@ -300,6 +373,22 @@ function App() {
     window.localStorage.removeItem("mosaic_access_token"); setToken(""); setCurrentUser(null); setJob(null); setShowAccess(false); window.history.replaceState(null, "", window.location.pathname);
   };
   const maxTrendRevenue = Math.max(1, ...analyticsTrend.map((item) => Number(item.revenue)));
+  const masterDataCreatePanel = token && (
+    <section className="operations-section master-create-panel" aria-labelledby="master-create-title">
+      <div className="operations-heading"><div><p className="eyebrow">Reference data</p><h2 id="master-create-title">Add master data</h2></div></div>
+      <form className="master-create-form" onSubmit={createMasterRecord}>
+        <label>Record type<select value={masterCreateType} onChange={(event) => setMasterCreateType(event.target.value as MasterCreateType)}><option value="products">Product</option><option value="warehouses">Warehouse</option><option value="suppliers">Supplier</option><option value="inventory">Inventory snapshot</option></select></label>
+        {masterCreateType === "inventory" ? <><label>Product<select value={inventoryProductId} onChange={(event) => setInventoryProductId(event.target.value)} required><option value="">Select product</option>{productReferences.map((product) => <option key={String(product.id)} value={String(product.id)}>{String(product.product_code)} — {String(product.name)}</option>)}</select></label><label>Warehouse<select value={inventoryWarehouseId} onChange={(event) => setInventoryWarehouseId(event.target.value)} required><option value="">Select warehouse</option>{warehouseReferences.map((warehouse) => <option key={String(warehouse.id)} value={String(warehouse.id)}>{String(warehouse.warehouse_code)} — {String(warehouse.name)}</option>)}</select></label><label>Snapshot date<input type="date" value={inventorySnapshotDate} onChange={(event) => setInventorySnapshotDate(event.target.value)} required /></label><label>Quantity on hand<input type="number" min="0" step="0.0001" value={inventoryQuantity} onChange={(event) => setInventoryQuantity(event.target.value)} required /></label><label>Unit cost <small>Optional</small><input type="number" min="0" step="0.0001" value={inventoryUnitCost} onChange={(event) => setInventoryUnitCost(event.target.value)} /></label></> : <><label>{masterCreateType === "products" ? "Product code" : masterCreateType === "warehouses" ? "Warehouse code" : "Supplier code"}<input value={masterCode} onChange={(event) => setMasterCode(event.target.value)} placeholder="Code" required /></label><label>Name<input value={masterName} onChange={(event) => setMasterName(event.target.value)} placeholder="Name" required /></label></>}
+        <div className="master-create-actions"><button className="button button-dark" type="submit">Save record</button>{masterCreateMessage && <span className={masterCreateMessage === "Record saved." ? "success-message" : "error-message"}>{masterCreateMessage}</span>}</div>
+      </form>
+    </section>
+  );
+  const masterDataEditPanel = token && editingMaster && ["products", "warehouses", "suppliers"].includes(masterType) && (
+    <section className="operations-section master-create-panel" aria-labelledby="master-edit-title"><div className="operations-heading"><div><p className="eyebrow">Reference data</p><h2 id="master-edit-title">Edit record</h2></div><button className="text-link" type="button" onClick={() => setEditingMaster(null)}>Close</button></div><form className="master-create-form" onSubmit={updateMasterRecord}><label>Name<input value={masterEditName} onChange={(event) => setMasterEditName(event.target.value)} required /></label><label className="master-active"><input type="checkbox" checked={masterEditActive} onChange={(event) => setMasterEditActive(event.target.checked)} />Active</label><div className="master-create-actions"><button className="button button-dark" type="submit">Save changes</button></div></form></section>
+  );
+  const importAttemptsPanel = token && job && attempts.length > 0 && (
+    <section className="operations-section attempt-list" aria-labelledby="attempts-title"><p className="eyebrow">Processing attempts</p><h2 id="attempts-title">Import execution history</h2>{attempts.map((attempt) => <small key={attempt.id}>Attempt {attempt.attempt_number} · {attempt.status}{attempt.failure_category ? ` · ${attempt.failure_category.replaceAll("_", " ")}` : ""}{attempt.duration_ms !== null ? ` · ${attempt.duration_ms} ms` : ""}</small>)}</section>
+  );
   const inventoryDashboard = token && (
     <section className="inventory-dashboard" id="inventory" aria-labelledby="inventory-title">
       <div className="dashboard-heading">
@@ -365,20 +454,23 @@ function App() {
 
   return <div className={`${token ? "app-shell workspace-shell" : "app-shell"}${showAccess ? " access-open" : ""}`}>
     {token && <aside className="workspace-sidebar" aria-label="Workspace navigation"><a className="sidebar-brand" href="#overview">MOSAIC<span>.</span></a><p className="sidebar-label">Workspace</p><nav className="sidebar-nav"><a className="sidebar-active" href="#overview"><span>⌂</span>Overview</a><a href="#inventory"><span>▧</span>Inventory</a><a href="#ingestion"><span>↥</span>Data intake</a><a href="#operations"><span>▦</span>Operations</a><a href="#analytics"><span>◒</span>Analytics</a><a href="#reports"><span>▤</span>Reports</a></nav><div className="sidebar-footer"><span className="sidebar-avatar">{currentUser?.name?.slice(0, 1).toUpperCase() ?? "M"}</span><div><strong>{currentUser?.name ?? "Workspace"}</strong><small>{currentUser?.email ?? "Tenant workspace"}</small></div><button className="sidebar-signout" type="button" onClick={signOut} aria-label="Sign out">↗</button></div></aside>}
-    <header className="topbar"><a className="brand" href="/">MOSAIC<span>.</span></a><nav><a className="active" href="#overview">Overview</a><a href="#ingestion">Data intake</a><a href="#operations">Operations</a>{token && <><a href="#analytics">Analytics</a><a href="#reports">Reports</a></>}</nav><div className="topbar-actions"><span className="connection"><i /> {apiStatus}</span>{token ? <><span className="user-label">{currentUser?.name ?? "Workspace"}</span><button className="button button-ghost" onClick={signOut}>Sign out</button></> : <a className="button button-gold" href="#access">Get started</a>}</div></header>
+    <header className="topbar"><a className="brand" href="/">MOSAIC<span>.</span></a><nav>{token ? <><a className="active" href="#overview">Overview</a><a href="#ingestion">Data intake</a><a href="#operations">Operations</a><a href="#analytics">Analytics</a><a href="#reports">Reports</a></> : <><a className="active" href="#overview">Product</a><a href="#network">Solutions</a><a href="#network">Analytics</a><a href="#network">Pricing</a></>}</nav><div className="topbar-actions"><span className="connection"><i /> {apiStatus}</span>{token ? <><span className="user-label">{currentUser?.name ?? "Workspace"}</span><button className="button button-ghost" onClick={signOut}>Sign out</button></> : <a className="button button-gold" href="#access">Get started</a>}</div></header>
     <main>
       {decisionDashboard}
       {inventoryDashboard}
+      {masterDataCreatePanel}
+      {masterDataEditPanel}
+      {importAttemptsPanel}
       {token && <div className="dashboard-toolbar" aria-live="polite"><label>Trend period<select value={analyticsPeriod} onChange={(event) => setAnalyticsPeriod(event.target.value as AnalyticsPeriod)}><option value="day">Daily</option><option value="week">Weekly</option><option value="month">Monthly</option></select></label>{analyticsLoading && <span className="dashboard-loading">Refreshing decision data…</span>}</div>}
       {token && <section className="operations-section analytics-query" id="sales-query"><div className="operations-heading"><div><p className="eyebrow">Sales query</p><h2>Explore grouped performance</h2></div><button className="button button-ghost" type="button" onClick={refreshAnalytics}>Refresh</button></div><div className="report-filters"><label>Group by<select value={analyticsGroupBy} onChange={(event) => setAnalyticsGroupBy(event.target.value as AnalyticsGroupBy)}><option value="product">Product</option><option value="warehouse">Warehouse</option><option value="date">Date</option></select></label><label>From<input type="date" value={analyticsDateFrom} onChange={(event) => setAnalyticsDateFrom(event.target.value)} /></label><label>To<input type="date" value={analyticsDateTo} onChange={(event) => setAnalyticsDateTo(event.target.value)} /></label></div>{salesGroups.length === 0 ? <p className="empty-state">No grouped sales match these filters.</p> : <div className="history-list">{salesGroups.map((item) => <article className="history-row" key={item.key}><div><strong>{item.label ?? item.key}</strong><small>{item.sales_count} transactions · {String(item.total_quantity)} units</small></div><span>{String(item.total_revenue)}</span></article>)}</div>}</section>}
-      <section className="hero" id="overview"><div className="hero-copy"><p className="eyebrow">Supply-chain decision intelligence</p><h1>Make every supply decision <em>clearer.</em></h1><p className="hero-text">MOSAIC connects the signals across your supply chain so your team can see what is happening, understand why, and act with confidence.</p><div className="hero-actions"><a className="button button-gold" href="#access">Enter your workspace <span>→</span></a><a className="text-link" href="#ingestion">Explore data intake <span>↗</span></a></div></div><div className="hero-art" aria-hidden="true"><div className="art-grid" /><div className="art-orbit orbit-one" /><div className="art-orbit orbit-two" /><div className="art-node node-one" /><div className="art-node node-two" /><div className="art-node node-three" /><div className="art-label label-one">DEMAND</div><div className="art-label label-two">SUPPLY</div><div className="art-label label-three">ACTION</div></div></section>
-      <section className="access-section" id="access"><div className="section-intro"><p className="eyebrow">Your operating picture</p><h2>Start with a clearer view.</h2><p>Securely connect your operational data and turn it into decisions your business can explain.</p></div>{!token ? <form className="auth-card" onSubmit={authenticate}><div className="card-heading"><span className="card-mark">✦</span><div><p className="eyebrow">MOSAIC workspace</p><h2>{authMode === "login" ? "Welcome back" : "Create your workspace"}</h2></div></div><div className="tabs"><button type="button" className={authMode === "login" ? "selected" : ""} onClick={() => setAuthMode("login")}>Sign in</button><button type="button" className={authMode === "register" ? "selected" : ""} onClick={() => setAuthMode("register")}>Register</button></div>{authMode === "register" && <label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" required /></label>}<label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 12 characters" minLength={12} required /></label><button className="button button-dark submit-button" type="submit">{authMode === "login" ? "Sign in to MOSAIC" : "Create workspace"}<span>→</span></button>{authMessage && <p className="success-message">{authMessage}</p>}<p className="privacy-note">Your workspace is tenant-isolated and protected.</p></form> : <form className="auth-card import-form" id="ingestion" onSubmit={submitImport}><div className="card-heading"><span className="card-mark">↗</span><div><p className="eyebrow">Data intake</p><h2>Import operational data</h2></div></div><p className="card-description">Upload a CSV and MOSAIC will validate, normalize, and stage it safely.</p><label>Dataset<select value={datasetType} onChange={(event) => setDatasetType(event.target.value as DatasetType)}><option value="sales_history">Sales history</option><option value="products">Products</option><option value="warehouses">Warehouses</option><option value="suppliers">Suppliers</option><option value="inventory_snapshots">Inventory snapshots</option></select></label><label className="file-drop"><input type="file" accept=".csv,text/csv" onChange={(event: ChangeEvent<HTMLInputElement>) => setFile(event.target.files?.[0] ?? null)} /><span className="upload-icon">↑</span><strong>{file ? file.name : "Choose a CSV file"}</strong><small>{file ? `${(file.size / 1024).toFixed(1)} KB selected` : "Maximum file size: 25 MB"}</small></label><button className="button button-dark submit-button" type="submit" disabled={!file}>Start secure import <span>→</span></button>{job && <p className="summary">Job {job.id.slice(0, 8)} · {job.status} · {job.successful_rows}/{job.total_rows} rows accepted{job.failed_rows ? ` · ${job.failed_rows} rejected` : ""}</p>}{message && <p className="error-message">{message}</p>}</form>}</section>
+      {!token && <PublicHome />}
+      <section className="access-section" id="access"><div className="section-intro"><p className="eyebrow">MOSAIC workspace</p><h2>{authMode === "login" ? "Welcome back" : "Create your account"}</h2><p>Securely connect your operational data and turn it into decisions your business can explain.</p></div>{!token ? <form className="auth-card" onSubmit={authenticate}><div className="card-heading"><span className="card-mark">✦</span><div><p className="eyebrow">MOSAIC workspace</p><h2>{authMode === "login" ? "Sign in to MOSAIC" : "Create your account"}</h2></div></div><button className="google-button" type="button" onClick={startGoogleSignIn}><span aria-hidden="true">G</span>Continue with Google</button><div className="auth-divider"><span>or</span></div><div className="tabs"><button type="button" className={authMode === "login" ? "selected" : ""} onClick={() => { setAuthMode("login"); setAuthMessage(""); }}>Sign in</button><button type="button" className={authMode === "register" ? "selected" : ""} onClick={() => { setAuthMode("register"); setAuthMessage(""); }}>Create account</button></div>{authMode === "register" && <label>Full name <em>*</em><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" required /></label>}<label>Email <em>*</em><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label><label>Password <em>*</em><span className="password-field"><input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 12 characters" minLength={12} required /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? "Hide" : "Show"}</button></span></label>{authMode === "register" && <><p className="password-help">Use at least 12 characters. Avoid reusing a password from another service.</p><label>Confirm password <em>*</em><span className="password-field"><input type={showConfirmPassword ? "text" : "password"} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Re-enter your password" minLength={12} required /><button type="button" onClick={() => setShowConfirmPassword((visible) => !visible)} aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"}>{showConfirmPassword ? "Hide" : "Show"}</button></span></label></>}<button className="button button-dark submit-button" type="submit">{authMode === "login" ? "Sign in" : "Create account"}</button>{authMessage && <p className={authMessage.includes("created") || authMessage.includes("success") ? "success-message" : "error-message"}>{authMessage}</p>}<p className="privacy-note">By continuing, you agree to use this tenant-isolated workspace responsibly.</p></form> : <form className="auth-card import-form" id="ingestion" onSubmit={submitImport}><div className="card-heading"><span className="card-mark">↗</span><div><p className="eyebrow">Data intake</p><h2>Import operational data</h2></div></div><p className="card-description">Upload a CSV and MOSAIC will validate, normalize, and stage it safely.</p><label>Dataset<select value={datasetType} onChange={(event) => setDatasetType(event.target.value as DatasetType)}><option value="sales_history">Sales history</option><option value="products">Products</option><option value="warehouses">Warehouses</option><option value="suppliers">Suppliers</option><option value="inventory_snapshots">Inventory snapshots</option></select></label><label className="file-drop"><input type="file" accept=".csv,text/csv" onChange={(event: ChangeEvent<HTMLInputElement>) => setFile(event.target.files?.[0] ?? null)} /><span className="upload-icon">↑</span><strong>{file ? file.name : "Choose a CSV file"}</strong><small>{file ? `${(file.size / 1024).toFixed(1)} KB selected` : "Maximum file size: 25 MB"}</small></label><button className="button button-dark submit-button" type="submit" disabled={!file}>Start secure import <span>→</span></button>{job && <p className="summary">Job {job.id.slice(0, 8)} · {job.status} · {job.successful_rows}/{job.total_rows} rows accepted{job.failed_rows ? ` · ${job.failed_rows} rejected` : ""}</p>}{message && <p className="error-message">{message}</p>}</form>}</section>
       {token && <section className="operations-section" id="operations"><div className="operations-heading"><div><p className="eyebrow">Operations</p><h2>Import history</h2></div><button className="button button-ghost" onClick={refreshOperations}>Refresh</button></div>{stats && <div className="stats-grid"><div><strong>{stats.total_imports}</strong><span>Imports</span></div><div><strong>{stats.successful_rows}</strong><span>Rows accepted</span></div><div><strong>{stats.failed_rows}</strong><span>Rows rejected</span></div></div>}<div className="history-list">{history.length === 0 ? <p className="empty-state">No imports yet. Upload your first sales-history CSV above.</p> : history.map((item) => <article className="history-row" key={item.id}><div><strong>{item.original_filename}</strong><small>{item.id.slice(0, 8)} · {item.status}</small></div><span>{item.successful_rows}/{item.total_rows} rows</span><button className="text-link" onClick={() => inspectImport(item)}>Inspect</button>{item.status === "failed" && <button className="text-link" onClick={() => retryImport(item)}>Retry</button>}{["pending", "processing"].includes(item.status) && <button className="text-link" onClick={() => cancelImport(item)}>Cancel</button>}</article>)}</div>{job && <div className="detail-card"><p className="eyebrow">Selected import</p><h3>{job.id}</h3><p>{job.status} · {job.failed_rows} validation errors</p>{job.failed_rows > 0 && <button className="text-link" onClick={() => downloadReport(job)}>Download validation report</button>}{events.length > 0 && <div className="event-list"><p className="eyebrow">Activity</p>{events.map((event) => <small key={event.id}>{event.event_type.replaceAll("_", " ")} · {new Date(event.created_at).toLocaleString()}</small>)}</div>}{errors.length > 0 && <ul className="error-list">{errors.map((error) => <li key={`${error.row_number}-${error.message}`}>Row {error.row_number}{error.field_name ? ` (${error.field_name})` : ""}: {error.message}</li>)}</ul>}</div>}</section>}
-      {token && <section className="operations-section"><div className="operations-heading"><div><p className="eyebrow">Business data</p><h2>Explore your tenant data</h2></div><button className="button button-ghost" onClick={refreshMasterData}>Refresh</button></div><label>Dataset<select value={masterType} onChange={(event) => setMasterType(event.target.value as DatasetType)}><option value="products">Products</option><option value="warehouses">Warehouses</option><option value="suppliers">Suppliers</option><option value="inventory">Inventory snapshots</option><option value="sales_history">Sales history</option></select></label>{masterMessage && <p className="error-message">{masterMessage}</p>}<div className="history-list">{masterItems.length === 0 ? <p className="empty-state">No {masterType} loaded yet.</p> : masterItems.slice(0, 50).map((item, index) => <article className="history-row" key={String(item.id ?? index)}><div><strong>{String(item.product_code ?? item.warehouse_code ?? item.supplier_code ?? item.name ?? "Record")}</strong><small>{String(item.name ?? item.snapshot_date ?? item.sale_date ?? item.location ?? "")}</small></div><span>{String(item.is_active ?? item.quantity_on_hand ?? item.quantity ?? "")}</span></article>)}</div></section>}
+      {token && <section className="operations-section"><div className="operations-heading"><div><p className="eyebrow">Business data</p><h2>Explore your tenant data</h2></div><button className="button button-ghost" onClick={refreshMasterData}>Refresh</button></div><label>Dataset<select value={masterType} onChange={(event) => setMasterType(event.target.value as DatasetType)}><option value="products">Products</option><option value="warehouses">Warehouses</option><option value="suppliers">Suppliers</option><option value="inventory">Inventory snapshots</option><option value="sales_history">Sales history</option></select></label>{masterMessage && <p className="error-message">{masterMessage}</p>}<div className="history-list">{masterItems.length === 0 ? <p className="empty-state">No {masterType} loaded yet.</p> : masterItems.slice(0, 50).map((item, index) => <article className="history-row" key={String(item.id ?? index)}><div><strong>{String(item.product_code ?? item.warehouse_code ?? item.supplier_code ?? item.name ?? "Record")}</strong><small>{String(item.name ?? item.snapshot_date ?? item.sale_date ?? item.location ?? "")}</small></div><span>{String(item.is_active ?? item.quantity_on_hand ?? item.quantity ?? "")}</span>{["products", "warehouses", "suppliers"].includes(masterType) && <button className="text-link" type="button" onClick={() => beginMasterEdit(item)}>Edit</button>}</article>)}</div></section>}
       {token && <section className="operations-section" id="analytics"><div className="operations-heading"><div><p className="eyebrow">Decision signals</p><h2>Analytics overview</h2></div><button className="button button-ghost" onClick={refreshAnalytics}>Refresh</button></div>{analyticsMessage && <p className="error-message">{analyticsMessage}</p>}{analyticsSummary && <div className="stats-grid"><div><strong>{String(analyticsSummary.total_revenue)}</strong><span>Revenue</span></div><div><strong>{analyticsSummary.sales_count}</strong><span>Transactions</span></div><div><strong>{String(analyticsSummary.average_sale_value)}</strong><span>Average sale</span></div><div><strong>{String(analyticsSummary.inventory_quantity)}</strong><span>Current inventory</span></div></div>}<div className="history-list">{analyticsTrend.length === 0 ? <p className="empty-state">No sales trend data for this workspace.</p> : analyticsTrend.map((item) => <article className="history-row trend-row" key={item.period}><div><strong>{item.period}</strong><small>{item.sales_count} transactions</small></div><div className="trend-bar"><span style={{ width: `${Math.max(5, Number(item.revenue) / maxTrendRevenue * 100)}%` }} /></div><span>{String(item.revenue)} revenue</span></article>)}</div><div className="history-list">{topProducts.length > 0 && <><p className="eyebrow">Top products</p>{topProducts.map((item) => <article className="history-row" key={`product-${item.product_code}`}><div><strong>#{item.rank} {item.product_name ?? item.product_code}</strong><small>{item.product_code} · {item.sales_count} transactions</small></div><span>{String(item.revenue)}</span></article>)}</>}{warehousePerformance.length > 0 && <><p className="eyebrow">Warehouse performance</p>{warehousePerformance.map((item) => <article className="history-row" key={`warehouse-${item.warehouse_code}`}><div><strong>#{item.rank} {item.warehouse_name ?? item.warehouse_code}</strong><small>{item.warehouse_code} · {item.sales_count} transactions</small></div><span>{String(item.revenue)}</span></article>)}</>}</div></section>}
       {token && <section className="operations-section" id="reports"><div className="operations-heading"><div><p className="eyebrow">Reusable business output</p><h2>Reports & exports</h2></div><div className="report-actions"><button className="button button-ghost" type="button" onClick={generateReport}>Generate</button><button className="button button-gold" type="button" onClick={exportReport}>Download CSV</button></div></div><div className="report-filters"><label>Report<select value={reportType} onChange={(event) => setReportType(event.target.value as ReportType)}><option value="sales">Sales report</option><option value="products">Product performance</option><option value="inventory">Inventory report</option><option value="warehouses">Warehouse report</option></select></label><label>From<input type="date" value={reportDateFrom} onChange={(event) => setReportDateFrom(event.target.value)} /></label><label>To<input type="date" value={reportDateTo} onChange={(event) => setReportDateTo(event.target.value)} /></label></div>{reportMessage && <p className="error-message">{reportMessage}</p>}{report?.summary && <div className="stats-grid"><div><strong>{String(report.summary.total_revenue ?? report.summary.total_quantity ?? "0")}</strong><span>{reportType === "inventory" ? "Inventory quantity" : "Revenue"}</span></div><div><strong>{String(report.summary.sales_count ?? report.summary.inventory_record_count ?? 0)}</strong><span>{reportType === "inventory" ? "Inventory records" : "Transactions"}</span></div><div><strong>{String(report.summary.average_sale_value ?? "—")}</strong><span>Average sale</span></div></div>}{report?.trend && <div className="history-list"><p className="eyebrow">Sales trend</p>{report.trend.map((item) => <article className="history-row" key={item.period}><div><strong>{item.period}</strong><small>{item.sales_count} transactions</small></div><span>{String(item.revenue)}</span></article>)}</div>}{report?.items && <div className="history-list">{report.items.length === 0 ? <p className="empty-state">No rows match this report.</p> : report.items.map((item) => <article className="history-row" key={`${item.product_code ?? item.warehouse_code}-${item.snapshot_date ?? item.rank}`}><div><strong>{item.product_name ?? item.warehouse_name ?? item.product_code ?? item.warehouse_code}</strong><small>{item.snapshot_date ?? `${item.sales_count} transactions`}</small></div><span>{String(item.revenue ?? item.quantity_on_hand ?? "")}</span></article>)}</div>}{report?.top_products && <div className="history-list"><p className="eyebrow">Top products</p>{report.top_products.map((item) => <article className="history-row" key={`report-product-${item.product_code}`}><div><strong>#{item.rank} {item.product_name ?? item.product_code}</strong><small>{item.sales_count} transactions</small></div><span>{String(item.revenue)}</span></article>)}</div>}{report?.warehouse_performance && <div className="history-list"><p className="eyebrow">Warehouse performance</p>{report.warehouse_performance.map((item) => <article className="history-row" key={`report-warehouse-${item.warehouse_code}`}><div><strong>#{item.rank} {item.warehouse_name ?? item.warehouse_code}</strong><small>{item.sales_count} transactions</small></div><span>{String(item.revenue)}</span></article>)}</div>}</section>}
-      <section className="feature-strip" id="network"><div><span className="feature-number">01</span><h3>Connect the signals</h3><p>Bring sales, inventory, suppliers, and warehouses into one decision picture.</p></div><div><span className="feature-number">02</span><h3>Understand the risk</h3><p>Separate the noise from the operational conditions that need attention.</p></div><div><span className="feature-number">03</span><h3>Choose with confidence</h3><p>Make explainable decisions today and learn from their outcomes tomorrow.</p></div></section>
-    </main><footer><span className="brand">MOSAIC<span>.</span></span><span>Decision intelligence for resilient supply chains.</span><span className="connection"><i /> {apiStatus}</span></footer>
+      {!token && <PublicFeatures />}
+    </main>{!token && <PublicFooter apiStatus={apiStatus} />}
   </div>;
 }
 
