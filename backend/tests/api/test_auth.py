@@ -1,5 +1,7 @@
 import uuid
 
+import pytest
+from conftest import verify_test_user
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -9,6 +11,7 @@ from app.main import app
 from app.models.base import Base
 from app.models.organization import Organization
 from app.models.user import User
+from app.routers import auth as auth_router
 
 Base.metadata.create_all(engine)
 
@@ -41,6 +44,7 @@ def test_duplicate_email_is_rejected_case_insensitively() -> None:
     payload = registration_payload()
     client = TestClient(app)
     assert client.post("/api/v1/auth/register", json=payload).status_code == 201
+    verify_test_user(payload["email"])
     duplicate = {**payload, "email": payload["email"].upper()}
     response = client.post("/api/v1/auth/register", json=duplicate)
     assert response.status_code == 409
@@ -51,6 +55,7 @@ def test_login_returns_token_and_rejects_invalid_password() -> None:
     payload = registration_payload()
     client = TestClient(app)
     assert client.post("/api/v1/auth/register", json=payload).status_code == 201
+    verify_test_user(payload["email"])
     response = client.post(
         "/api/v1/auth/login",
         json={"email": payload["email"].upper(), "password": payload["password"]},
@@ -63,6 +68,45 @@ def test_login_returns_token_and_rejects_invalid_password() -> None:
     )
     assert invalid.status_code == 401
     assert invalid.json()["detail"] == "Invalid email or password"
+
+
+def test_unverified_user_cannot_login() -> None:
+    payload = registration_payload()
+    client = TestClient(app)
+    assert client.post("/api/v1/auth/register", json=payload).status_code == 201
+
+    response = client.post("/api/v1/auth/login", json=payload)
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Please verify your email before signing in"
+
+
+def test_email_verification_enables_login_and_is_one_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = registration_payload()
+    captured: dict[str, str] = {}
+
+    def capture_email(email: str, name: str, token: str) -> None:
+        captured["email"] = email
+        captured["token"] = token
+
+    monkeypatch.setattr(auth_router, "send_verification_email", capture_email)
+    client = TestClient(app)
+    assert client.post("/api/v1/auth/register", json=payload).status_code == 201
+    assert captured["email"] == payload["email"].lower()
+
+    verification = client.get(
+        "/api/v1/auth/verify-email", params={"token": captured["token"]}, follow_redirects=False
+    )
+    assert verification.status_code == 307
+    assert "Email%20verified%20successfully" in verification.headers["location"]
+    assert client.post("/api/v1/auth/login", json=payload).status_code == 200
+
+    reused = client.get(
+        "/api/v1/auth/verify-email", params={"token": captured["token"]}, follow_redirects=False
+    )
+    assert "invalid%20or%20expired" in reused.headers["location"]
 
 
 def test_inactive_user_cannot_login() -> None:

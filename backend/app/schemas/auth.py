@@ -55,4 +55,5 @@ class UserResponse(BaseModel):
     email: EmailStr
     name: str
     is_active: bool
+    email_verified_at: datetime | None
     created_at: datetime

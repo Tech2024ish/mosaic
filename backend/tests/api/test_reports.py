@@ -4,6 +4,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
+from conftest import verify_test_user
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -29,6 +30,7 @@ def account(client: TestClient) -> tuple[dict[str, str], uuid.UUID]:
     }
     registered = client.post("/api/v1/auth/register", json=payload)
     assert registered.status_code == 201
+    verify_test_user(payload["email"])
     login = client.post(
         "/api/v1/auth/login", json={"email": payload["email"], "password": payload["password"]}
     )

@@ -127,7 +127,28 @@ Invoke-RestMethod http://localhost:8000/api/v1/auth/me -Headers $headers
 Invoke-RestMethod http://localhost:8000/api/v1/auth/logout -Method Post -Headers $headers
 ```
 
-The authentication endpoints are `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, authenticated `GET /api/v1/auth/me`, and authenticated `POST /api/v1/auth/logout`. Registration creates a new organization; organization IDs are never accepted from clients. Logout revokes only the current user's session.
+The authentication endpoints are `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, authenticated `GET /api/v1/auth/me`, and authenticated `POST /api/v1/auth/logout`. Registration creates a new organization; organization IDs are never accepted from clients. Logout revokes only the current user's session. Optional Google sign-in uses `GET /api/v1/auth/google/start` and its OAuth callback; set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and `FRONTEND_URL` to enable it. Google accounts use the same database-backed MOSAIC session and JWT flow.
+
+Password registrations are unverified until the one-time link sent to the submitted email is opened. `GET /api/v1/auth/verify-email?token=...` consumes the expiring token; password login returns `403` until verification succeeds. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_FROM_EMAIL` for delivery. When SMTP is absent, development logs that delivery is unavailable; verification tokens are never logged.
+
+### Enable Google sign-in locally
+
+Google credentials are project-specific and must be created in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials). Configure the OAuth consent screen, create a Web application OAuth client, and add this authorized redirect URI:
+
+```text
+http://localhost:8000/api/v1/auth/google/callback
+```
+
+Copy the generated values into your untracked `.env` file:
+
+```env
+GOOGLE_CLIENT_ID=123456789012-example.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-your-generated-secret
+GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/auth/google/callback
+FRONTEND_URL=http://localhost:5173
+```
+
+The values above are examples of the required format, not working credentials. Leave the Google fields blank to keep the feature disabled. Never commit the client secret.
 
 ## Phase 2 data ingestion
 

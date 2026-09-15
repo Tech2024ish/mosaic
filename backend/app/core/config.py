@@ -27,6 +27,18 @@ class Settings(BaseSettings):
     db_max_overflow: int = 10
     db_pool_timeout_seconds: int = 30
     backend_cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str = "http://localhost:8000/api/v1/auth/google/callback"
+    frontend_url: str = "http://localhost:5173"
+    backend_url: str = "http://localhost:8000"
+    email_verification_expire_minutes: int = 30
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str = "no-reply@mosaic.local"
+    smtp_use_tls: bool = True
 
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[3] / ".env",
@@ -45,6 +57,8 @@ class Settings(BaseSettings):
     def build_database_url(self) -> "Settings":
         if self.access_token_expire_minutes < 1:
             raise ValueError("access_token_expire_minutes must be positive")
+        if self.email_verification_expire_minutes < 1 or self.smtp_port < 1:
+            raise ValueError("email verification and SMTP settings are invalid")
         if self.max_upload_size_bytes < 1 or self.report_export_max_rows < 1:
             raise ValueError("upload and report export limits must be positive")
         if self.db_pool_size < 1 or self.db_max_overflow < 0 or self.db_pool_timeout_seconds < 1:

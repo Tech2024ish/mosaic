@@ -1,3 +1,4 @@
+from app.models.email_verification_token import EmailVerificationToken
 from app.models.import_error import ImportError
 from app.models.import_event import ImportEvent
 from app.models.import_job import DatasetType, ImportJob, ImportStatus
@@ -16,6 +17,7 @@ __all__ = [
     "DatasetType",
     "ImportError",
     "ImportEvent",
+    "EmailVerificationToken",
     "ImportProcessingAttempt",
     "InventorySnapshot",
     "ImportJob",

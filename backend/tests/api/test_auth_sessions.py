@@ -1,6 +1,7 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from conftest import verify_test_user
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -24,6 +25,7 @@ def test_login_creates_a_database_session() -> None:
     payload = account()
     client = TestClient(app)
     assert client.post("/api/v1/auth/register", json=payload).status_code == 201
+    verify_test_user(payload["email"])
     response = client.post("/api/v1/auth/login", json=payload)
     assert response.status_code == 200
 
@@ -39,6 +41,7 @@ def test_logout_revokes_the_current_session() -> None:
     payload = account()
     client = TestClient(app)
     client.post("/api/v1/auth/register", json=payload)
+    verify_test_user(payload["email"])
     token = client.post("/api/v1/auth/login", json=payload).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -51,6 +54,7 @@ def test_malformed_and_expired_session_tokens_are_rejected() -> None:
     payload = account()
     client = TestClient(app)
     client.post("/api/v1/auth/register", json=payload)
+    verify_test_user(payload["email"])
     with SessionLocal() as db:
         user = db.scalar(select(User).where(User.email == payload["email"]))
         assert user is not None
@@ -79,6 +83,8 @@ def test_session_cannot_be_used_by_a_different_user() -> None:
     client = TestClient(app)
     client.post("/api/v1/auth/register", json=first)
     client.post("/api/v1/auth/register", json=second)
+    verify_test_user(first["email"])
+    verify_test_user(second["email"])
     with SessionLocal() as db:
         first_user = db.scalar(select(User).where(User.email == first["email"]))
         second_user = db.scalar(select(User).where(User.email == second["email"]))

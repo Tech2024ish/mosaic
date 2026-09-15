@@ -103,9 +103,33 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const handleHashChange = () => setShowAccess(window.location.hash === "#access");
+    const handleHashChange = () => setShowAccess(window.location.hash.startsWith("#access"));
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.startsWith("#oauth_token=")) {
+      const oauthToken = decodeURIComponent(hash.slice("#oauth_token=".length));
+      if (oauthToken) {
+        window.localStorage.setItem("mosaic_access_token", oauthToken);
+        setToken(oauthToken);
+        setShowAccess(true);
+        window.history.replaceState(null, "", `${window.location.pathname}#access`);
+      }
+      return;
+    }
+    if (hash.startsWith("#access&auth_error=")) {
+      const error = new URLSearchParams(hash.slice("#access&".length)).get("auth_error");
+      if (error) setAuthMessage(error);
+      setShowAccess(true);
+    }
+    if (hash.startsWith("#access&auth_message=")) {
+      const message = new URLSearchParams(hash.slice("#access&".length)).get("auth_message");
+      if (message) setAuthMessage(message);
+      setShowAccess(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -287,15 +311,19 @@ function App() {
       if (password !== confirmPassword) { setAuthMessage("Passwords do not match."); return; }
       const registration = await fetch(`${API_URL}/api/v1/auth/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, name, password }) });
       if (!registration.ok) { setAuthMessage("Registration could not be completed."); return; }
+      setAuthMode("login");
+      setAuthMessage("Account created. Check your email to verify it before signing in.");
+      return;
     }
     const response = await fetch(`${API_URL}/api/v1/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
     if (!response.ok) { setAuthMessage("Check your email and password, then try again."); return; }
     const result = await response.json(); window.localStorage.setItem("mosaic_access_token", result.access_token); setToken(result.access_token);
-    setAuthMessage(authMode === "register" ? "Workspace created" : "Signed in successfully");
+    setAuthMessage("Signed in successfully");
   };
 
   const startGoogleSignIn = () => {
-    setAuthMessage("Google sign-in is not configured for this MOSAIC deployment.");
+    setAuthMessage("Connecting to Google…");
+    window.location.assign(`${API_URL}/api/v1/auth/google/start`);
   };
 
   const submitImport = async (event: FormEvent) => {

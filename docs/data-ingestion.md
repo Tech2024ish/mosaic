@@ -31,7 +31,7 @@ Use `GET /api/v1/imports/{import_id}` for status and summary, and `GET /api/v1/i
 
 ## Tenant isolation and security
 
-The organization is derived from the authenticated user record, never from a request organization ID. Jobs, staging rows, and sales rows all store organization ownership. Reads apply organization predicates; foreign keys provide referential integrity. The current authentication foundation uses signed HS256 bearer tokens, with login/token issuance intentionally deferred to the authentication milestone.
+The organization is derived from the authenticated user record, never from a request organization ID. Jobs, staging rows, and sales rows all store organization ownership. Reads apply organization predicates; foreign keys provide referential integrity. The authentication foundation uses signed HS256 bearer tokens and database-backed sessions. Optional Google OAuth links a verified Google subject to the same local user/session flow when configured.
 
 Authentication is now available through `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, and `GET /api/v1/auth/me`. Send the login response as `Authorization: Bearer <access_token>` when calling the import endpoints. Registration creates and associates a new organization server-side; clients cannot select a tenant.
 

@@ -50,7 +50,9 @@ Logout revokes the current session in the database. Organization context is alwa
 
 Implemented: registration, login, token issuance, authenticated user resolution, database-backed session management, logout, revocation, and tenant-aware authenticated context.
 
-Deferred: OAuth/social login, advanced identity providers, enterprise SSO, distributed session infrastructure, Redis-backed sessions, and microservices.
+Optional Google OAuth is integrated through the existing authentication router. The signed, short-lived OAuth state protects the callback, Google email verification is required, and the stable Google subject is linked to the local user before the existing database-backed session and JWT are issued. Google OAuth remains disabled when its configuration is absent. Advanced identity providers, enterprise SSO, distributed session infrastructure, Redis-backed sessions, and microservices remain deferred.
+
+Password accounts use the same session architecture but require email verification before login. Registration stores only a SHA-256 hash of a one-time expiring verification token. The token is consumed by `GET /api/v1/auth/verify-email`; SMTP delivery is configuration-driven and absent SMTP configuration fails closed for delivery without logging the token.
 
 ## Phase 6 master data
 
