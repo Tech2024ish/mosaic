@@ -9,17 +9,26 @@ from app.core.config import get_settings
 from app.infrastructure.database.session import get_db
 from app.models.session import UserSession
 from app.models.user import User
-from app.schemas.auth import LoginRequest, TokenResponse, UserRegistrationRequest, UserResponse
+from app.schemas.auth import (
+    LoginRequest,
+    PasswordResetConfirmRequest,
+    PasswordResetRequest,
+    TokenResponse,
+    UserRegistrationRequest,
+    UserResponse,
+)
 from app.services.auth_service import (
     DuplicateEmailError,
     UnverifiedEmailError,
     authenticate_user,
     create_authenticated_session,
+    create_password_reset,
     register_user,
+    reset_password,
     revoke_session,
     verify_email,
 )
-from app.services.email_service import send_verification_email
+from app.services.email_service import send_password_reset_email, send_verification_email
 from app.services.google_auth_service import (
     GoogleAuthError,
     GoogleAuthNotConfigured,
@@ -93,6 +102,27 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
         )
     return TokenResponse(access_token=create_authenticated_session(db, user))
+
+
+@router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
+def forgot_password(payload: PasswordResetRequest, db: Session = Depends(get_db)) -> Response:
+    reset = create_password_reset(db, str(payload.email))
+    if reset is not None:
+        user, token = reset
+        send_password_reset_email(user.email, user.name, token)
+    return Response(status_code=status.HTTP_202_ACCEPTED)
+
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+def reset_password_endpoint(
+    payload: PasswordResetConfirmRequest, db: Session = Depends(get_db)
+) -> Response:
+    if not reset_password(db, payload.token, payload.new_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired password reset link",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/verify-email")

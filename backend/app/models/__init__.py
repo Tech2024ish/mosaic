@@ -5,6 +5,7 @@ from app.models.import_job import DatasetType, ImportJob, ImportStatus
 from app.models.import_processing_attempt import ImportProcessingAttempt
 from app.models.inventory_snapshot import InventorySnapshot
 from app.models.organization import Organization
+from app.models.password_reset_token import PasswordResetToken
 from app.models.product import Product
 from app.models.sales_history import SalesHistory
 from app.models.session import UserSession
@@ -23,6 +24,7 @@ __all__ = [
     "ImportJob",
     "ImportStatus",
     "Organization",
+    "PasswordResetToken",
     "SalesHistory",
     "UserSession",
     "Product",

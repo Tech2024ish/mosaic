@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     backend_url: str = "http://localhost:8000"
     email_verification_expire_minutes: int = 30
+    password_reset_expire_minutes: int = 30
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_username: str | None = None
@@ -57,7 +58,11 @@ class Settings(BaseSettings):
     def build_database_url(self) -> "Settings":
         if self.access_token_expire_minutes < 1:
             raise ValueError("access_token_expire_minutes must be positive")
-        if self.email_verification_expire_minutes < 1 or self.smtp_port < 1:
+        if (
+            self.email_verification_expire_minutes < 1
+            or self.password_reset_expire_minutes < 1
+            or self.smtp_port < 1
+        ):
             raise ValueError("email verification and SMTP settings are invalid")
         if self.max_upload_size_bytes < 1 or self.report_export_max_rows < 1:
             raise ValueError("upload and report export limits must be positive")

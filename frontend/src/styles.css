@@ -272,3 +272,42 @@ nav { display: flex; gap: 30px; margin-right: auto; color: #61716b; font-size: .
 .app-shell:not(.workspace-shell) .feature-strip p { font-size: .76rem; line-height: 1.42; }
 .app-shell:not(.workspace-shell) .public-footer-brand p, .app-shell:not(.workspace-shell) .public-footer-main a { font-size: .7rem; }
 .app-shell:not(.workspace-shell) .public-footer h2 { font-size: .88rem; }
+.forgot-password-link { display: block; margin: 12px auto 0; border: 0; background: transparent; color: var(--green); cursor: pointer; font: inherit; font-size: .8rem; text-decoration: underline; }
+.app-shell.access-open:not(.workspace-shell) .forgot-password-link { position: fixed; z-index: 20; left: 50%; bottom: 24px; transform: translateX(-50%); margin: 0; padding: 9px 14px; border: 1px solid #d8e5d9; border-radius: 999px; background: #fff; box-shadow: 0 8px 24px #163a2820; white-space: nowrap; }
+.app-shell.access-open:not(.workspace-shell) .forgot-password-link:hover { color: #064f31; background: #f5faf4; }
+.app-shell.access-open:not(.workspace-shell) .topbar { justify-content: center; }
+.app-shell.access-open:not(.workspace-shell) .brand { margin: 0; color: #0fa15a; font-size: 1.8rem; }
+.app-shell.access-open:not(.workspace-shell) .access-section { max-width: 505px; padding-top: 30px; }
+.app-shell.access-open:not(.workspace-shell) .section-intro h2 { color: #0fa15a; font-size: 1.9rem; }
+.app-shell.access-open:not(.workspace-shell) .section-intro > p:last-child { color: #8db797; font-size: .7rem; }
+.app-shell.access-open:not(.workspace-shell) .auth-card { max-width: 505px; padding: 31px 27px 27px; border-radius: 12px; }
+.app-shell.access-open:not(.workspace-shell) .card-heading { justify-content: flex-start; }
+.app-shell.access-open:not(.workspace-shell) .card-heading h2 { font-size: 1.65rem; }
+.app-shell.access-open:not(.workspace-shell) .auth-divider { order: 18; }
+.app-shell.access-open:not(.workspace-shell) .google-button { order: 19; padding: 13px; border-radius: 8px; }
+.app-shell.access-open:not(.workspace-shell) .tabs { order: 3; }
+.app-shell.access-open:not(.workspace-shell) .auth-card > label { order: 4; }
+.app-shell.access-open:not(.workspace-shell) .auth-card .password-help { order: 5; }
+.app-shell.access-open:not(.workspace-shell) .auth-card .submit-button { order: 6; padding: 13px; border-radius: 8px; }
+.app-shell.access-open:not(.workspace-shell) .auth-card .privacy-note, .app-shell.access-open:not(.workspace-shell) .auth-card .success-message, .app-shell.access-open:not(.workspace-shell) .auth-card .error-message { order: 7; }
+.app-shell.access-open:not(.workspace-shell) { position: relative; }
+.app-shell.access-open:not(.workspace-shell) .forgot-password-link { position: absolute; z-index: 20; top: 396px; left: calc(50% + 120px); bottom: auto; transform: none; margin: 0; padding: 4px 0; color: #0fa15a; border: 0; background: transparent; box-shadow: none; font-weight: 700; }
+.app-shell.access-open:not(.workspace-shell) .forgot-password-link:hover { background: transparent; box-shadow: none; transform: none; }
+.resend-password-link { position: absolute; z-index: 20; top: 396px; left: calc(50% + 120px); padding: 4px 0; border: 0; color: #0fa15a; background: transparent; font: inherit; font-size: .68rem; font-weight: 700; cursor: pointer; }
+.resend-password-link:hover { color: #0fa15a; }
+.reset-confirm-field { position: absolute; z-index: 20; top: 425px; left: 50%; width: 451px; transform: translateX(-50%); color: #b3d2b9; font-size: .62rem; }
+.reset-confirm-field input { border-color: #1a4230; color: #f1fbf3; background: #081c14; }
+.app-shell.access-open:not(.workspace-shell):has(.reset-confirm-field) .google-button,
+.app-shell.access-open:not(.workspace-shell):has(.reset-confirm-field) .auth-divider,
+.app-shell.access-open:not(.workspace-shell):has(.reset-confirm-field) .tabs { display: none; }
+.app-shell.access-open:not(.workspace-shell):has(.reset-confirm-field) .auth-card { min-height: 555px; }
+.app-shell.access-open:not(.workspace-shell):has(.reset-confirm-field) .card-heading h2 { font-size: 0; }
+.app-shell.access-open:not(.workspace-shell):has(.reset-confirm-field) .card-heading h2::after { content: "Reset password"; font-size: 1.65rem; }
+.app-shell.access-open:not(.workspace-shell):has(.reset-confirm-field) .section-intro h2 { font-size: 0; }
+.app-shell.access-open:not(.workspace-shell):has(.reset-confirm-field) .section-intro h2::after { content: "Reset your password"; font-size: 1.9rem; }
+.app-shell.access-open:not(.workspace-shell):has(.reset-confirm-field) .submit-button { margin-top: 92px; }
+.app-shell.access-open:not(.workspace-shell):has(.reset-confirm-field) .submit-button { font-size: 0; }
+.app-shell.access-open:not(.workspace-shell):has(.reset-confirm-field) .submit-button::after { content: "Reset password"; font-size: .78rem; }
+@media (max-width: 520px) { .reset-confirm-field { top: 408px; right: 18px; left: 18px; width: auto; transform: none; }.app-shell.access-open:not(.workspace-shell):has(.reset-confirm-field) .auth-card { min-height: 555px; } }
+@media (max-width: 520px) { .app-shell.access-open:not(.workspace-shell) .forgot-password-link { top: 379px; right: 28px; left: auto; } }
+@media (max-width: 520px) { .resend-password-link { top: 379px; right: 28px; left: auto; } }

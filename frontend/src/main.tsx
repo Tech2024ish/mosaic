@@ -4,7 +4,7 @@ import { PublicFeatures, PublicFooter, PublicHome } from "./components/PublicHom
 import "./styles.css";
 
 const API_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
-type AuthMode = "login" | "register";
+type AuthMode = "login" | "register" | "reset";
 type Job = { id: string; original_filename?: string; status: string; total_rows: number; successful_rows: number; failed_rows: number };
 type ImportError = { row_number: number; message: string; field_name: string | null };
 type CurrentUser = { id: string; email: string; name: string; organization_id: string; is_active: boolean };
@@ -34,13 +34,16 @@ function App() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const resetPassword = password;
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [resetToken, setResetToken] = useState("");
   const [token, setToken] = useState(() => window.localStorage.getItem("mosaic_access_token") ?? "");
   const [showAccess, setShowAccess] = useState(() => window.location.hash === "#access");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authMessage, setAuthMessage] = useState("");
+  const [resetSent, setResetSent] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const [errors, setErrors] = useState<ImportError[]>([]);
@@ -128,6 +131,15 @@ function App() {
     if (hash.startsWith("#access&auth_message=")) {
       const message = new URLSearchParams(hash.slice("#access&".length)).get("auth_message");
       if (message) setAuthMessage(message);
+      setShowAccess(true);
+    }
+    if (hash.startsWith("#access&reset_token=")) {
+      const reset = new URLSearchParams(hash.slice("#access&".length)).get("reset_token");
+      if (reset) {
+        setResetToken(reset);
+        setAuthMode("reset");
+        setAuthMessage("Choose a new password for your MOSAIC account.");
+      }
       setShowAccess(true);
     }
   }, []);
@@ -307,6 +319,20 @@ function App() {
 
   const authenticate = async (event: FormEvent) => {
     event.preventDefault(); setAuthMessage("");
+    if (authMode === "reset") {
+      if (password.length < 12) {
+        setAuthMessage("Use at least 12 characters for your new password.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setAuthMessage("Passwords do not match.");
+        return;
+      }
+      const response = await fetch(`${API_URL}/api/v1/auth/reset-password`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: resetToken, new_password: resetPassword }) });
+      if (!response.ok) { setAuthMessage("This password reset link is invalid or expired."); return; }
+      setAuthMode("login"); setResetToken(""); setPassword(""); setConfirmPassword(""); setAuthMessage("Password reset successfully. You can now sign in.");
+      return;
+    }
     if (authMode === "register") {
       if (password !== confirmPassword) { setAuthMessage("Passwords do not match."); return; }
       const registration = await fetch(`${API_URL}/api/v1/auth/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, name, password }) });
@@ -319,6 +345,13 @@ function App() {
     if (!response.ok) { setAuthMessage("Check your email and password, then try again."); return; }
     const result = await response.json(); window.localStorage.setItem("mosaic_access_token", result.access_token); setToken(result.access_token);
     setAuthMessage("Signed in successfully");
+  };
+
+  const requestPasswordReset = async () => {
+    if (!email) { setAuthMessage("Enter your email address first."); return; }
+    const response = await fetch(`${API_URL}/api/v1/auth/forgot-password`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+    if (response.ok) { setResetSent(true); setAuthMessage("If that email is registered, a password reset link has been sent."); }
+    else setAuthMessage("We could not process the password reset request. Please try again.");
   };
 
   const startGoogleSignIn = () => {
@@ -492,6 +525,9 @@ function App() {
       {token && <div className="dashboard-toolbar" aria-live="polite"><label>Trend period<select value={analyticsPeriod} onChange={(event) => setAnalyticsPeriod(event.target.value as AnalyticsPeriod)}><option value="day">Daily</option><option value="week">Weekly</option><option value="month">Monthly</option></select></label>{analyticsLoading && <span className="dashboard-loading">Refreshing decision data…</span>}</div>}
       {token && <section className="operations-section analytics-query" id="sales-query"><div className="operations-heading"><div><p className="eyebrow">Sales query</p><h2>Explore grouped performance</h2></div><button className="button button-ghost" type="button" onClick={refreshAnalytics}>Refresh</button></div><div className="report-filters"><label>Group by<select value={analyticsGroupBy} onChange={(event) => setAnalyticsGroupBy(event.target.value as AnalyticsGroupBy)}><option value="product">Product</option><option value="warehouse">Warehouse</option><option value="date">Date</option></select></label><label>From<input type="date" value={analyticsDateFrom} onChange={(event) => setAnalyticsDateFrom(event.target.value)} /></label><label>To<input type="date" value={analyticsDateTo} onChange={(event) => setAnalyticsDateTo(event.target.value)} /></label></div>{salesGroups.length === 0 ? <p className="empty-state">No grouped sales match these filters.</p> : <div className="history-list">{salesGroups.map((item) => <article className="history-row" key={item.key}><div><strong>{item.label ?? item.key}</strong><small>{item.sales_count} transactions · {String(item.total_quantity)} units</small></div><span>{String(item.total_revenue)}</span></article>)}</div>}</section>}
       {!token && <PublicHome />}
+      {!token && authMode === "login" && !resetSent && <button className="forgot-password-link" type="button" onClick={requestPasswordReset}>Forgot password?</button>}
+      {!token && authMode === "login" && resetSent && <button className="resend-password-link" type="button" onClick={requestPasswordReset}>Resend</button>}
+      {!token && authMode === "reset" && <label className="reset-confirm-field">Confirm new password <em>*</em><span className="password-field"><input type={showConfirmPassword ? "text" : "password"} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Re-enter your new password" minLength={12} required /><button type="button" onClick={() => setShowConfirmPassword((visible) => !visible)} aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"}>{showConfirmPassword ? "Hide" : "Show"}</button></span></label>}
       <section className="access-section" id="access"><div className="section-intro"><p className="eyebrow">MOSAIC workspace</p><h2>{authMode === "login" ? "Welcome back" : "Create your account"}</h2><p>Securely connect your operational data and turn it into decisions your business can explain.</p></div>{!token ? <form className="auth-card" onSubmit={authenticate}><div className="card-heading"><span className="card-mark">✦</span><div><p className="eyebrow">MOSAIC workspace</p><h2>{authMode === "login" ? "Sign in to MOSAIC" : "Create your account"}</h2></div></div><button className="google-button" type="button" onClick={startGoogleSignIn}><span aria-hidden="true">G</span>Continue with Google</button><div className="auth-divider"><span>or</span></div><div className="tabs"><button type="button" className={authMode === "login" ? "selected" : ""} onClick={() => { setAuthMode("login"); setAuthMessage(""); }}>Sign in</button><button type="button" className={authMode === "register" ? "selected" : ""} onClick={() => { setAuthMode("register"); setAuthMessage(""); }}>Create account</button></div>{authMode === "register" && <label>Full name <em>*</em><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" required /></label>}<label>Email <em>*</em><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label><label>Password <em>*</em><span className="password-field"><input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 12 characters" minLength={12} required /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? "Hide" : "Show"}</button></span></label>{authMode === "register" && <><p className="password-help">Use at least 12 characters. Avoid reusing a password from another service.</p><label>Confirm password <em>*</em><span className="password-field"><input type={showConfirmPassword ? "text" : "password"} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Re-enter your password" minLength={12} required /><button type="button" onClick={() => setShowConfirmPassword((visible) => !visible)} aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"}>{showConfirmPassword ? "Hide" : "Show"}</button></span></label></>}<button className="button button-dark submit-button" type="submit">{authMode === "login" ? "Sign in" : "Create account"}</button>{authMessage && <p className={authMessage.includes("created") || authMessage.includes("success") ? "success-message" : "error-message"}>{authMessage}</p>}<p className="privacy-note">By continuing, you agree to use this tenant-isolated workspace responsibly.</p></form> : <form className="auth-card import-form" id="ingestion" onSubmit={submitImport}><div className="card-heading"><span className="card-mark">↗</span><div><p className="eyebrow">Data intake</p><h2>Import operational data</h2></div></div><p className="card-description">Upload a CSV and MOSAIC will validate, normalize, and stage it safely.</p><label>Dataset<select value={datasetType} onChange={(event) => setDatasetType(event.target.value as DatasetType)}><option value="sales_history">Sales history</option><option value="products">Products</option><option value="warehouses">Warehouses</option><option value="suppliers">Suppliers</option><option value="inventory_snapshots">Inventory snapshots</option></select></label><label className="file-drop"><input type="file" accept=".csv,text/csv" onChange={(event: ChangeEvent<HTMLInputElement>) => setFile(event.target.files?.[0] ?? null)} /><span className="upload-icon">↑</span><strong>{file ? file.name : "Choose a CSV file"}</strong><small>{file ? `${(file.size / 1024).toFixed(1)} KB selected` : "Maximum file size: 25 MB"}</small></label><button className="button button-dark submit-button" type="submit" disabled={!file}>Start secure import <span>→</span></button>{job && <p className="summary">Job {job.id.slice(0, 8)} · {job.status} · {job.successful_rows}/{job.total_rows} rows accepted{job.failed_rows ? ` · ${job.failed_rows} rejected` : ""}</p>}{message && <p className="error-message">{message}</p>}</form>}</section>
       {token && <section className="operations-section" id="operations"><div className="operations-heading"><div><p className="eyebrow">Operations</p><h2>Import history</h2></div><button className="button button-ghost" onClick={refreshOperations}>Refresh</button></div>{stats && <div className="stats-grid"><div><strong>{stats.total_imports}</strong><span>Imports</span></div><div><strong>{stats.successful_rows}</strong><span>Rows accepted</span></div><div><strong>{stats.failed_rows}</strong><span>Rows rejected</span></div></div>}<div className="history-list">{history.length === 0 ? <p className="empty-state">No imports yet. Upload your first sales-history CSV above.</p> : history.map((item) => <article className="history-row" key={item.id}><div><strong>{item.original_filename}</strong><small>{item.id.slice(0, 8)} · {item.status}</small></div><span>{item.successful_rows}/{item.total_rows} rows</span><button className="text-link" onClick={() => inspectImport(item)}>Inspect</button>{item.status === "failed" && <button className="text-link" onClick={() => retryImport(item)}>Retry</button>}{["pending", "processing"].includes(item.status) && <button className="text-link" onClick={() => cancelImport(item)}>Cancel</button>}</article>)}</div>{job && <div className="detail-card"><p className="eyebrow">Selected import</p><h3>{job.id}</h3><p>{job.status} · {job.failed_rows} validation errors</p>{job.failed_rows > 0 && <button className="text-link" onClick={() => downloadReport(job)}>Download validation report</button>}{events.length > 0 && <div className="event-list"><p className="eyebrow">Activity</p>{events.map((event) => <small key={event.id}>{event.event_type.replaceAll("_", " ")} · {new Date(event.created_at).toLocaleString()}</small>)}</div>}{errors.length > 0 && <ul className="error-list">{errors.map((error) => <li key={`${error.row_number}-${error.message}`}>Row {error.row_number}{error.field_name ? ` (${error.field_name})` : ""}: {error.message}</li>)}</ul>}</div>}</section>}
       {token && <section className="operations-section"><div className="operations-heading"><div><p className="eyebrow">Business data</p><h2>Explore your tenant data</h2></div><button className="button button-ghost" onClick={refreshMasterData}>Refresh</button></div><label>Dataset<select value={masterType} onChange={(event) => setMasterType(event.target.value as DatasetType)}><option value="products">Products</option><option value="warehouses">Warehouses</option><option value="suppliers">Suppliers</option><option value="inventory">Inventory snapshots</option><option value="sales_history">Sales history</option></select></label>{masterMessage && <p className="error-message">{masterMessage}</p>}<div className="history-list">{masterItems.length === 0 ? <p className="empty-state">No {masterType} loaded yet.</p> : masterItems.slice(0, 50).map((item, index) => <article className="history-row" key={String(item.id ?? index)}><div><strong>{String(item.product_code ?? item.warehouse_code ?? item.supplier_code ?? item.name ?? "Record")}</strong><small>{String(item.name ?? item.snapshot_date ?? item.sale_date ?? item.location ?? "")}</small></div><span>{String(item.is_active ?? item.quantity_on_hand ?? item.quantity ?? "")}</span>{["products", "warehouses", "suppliers"].includes(masterType) && <button className="text-link" type="button" onClick={() => beginMasterEdit(item)}>Edit</button>}</article>)}</div></section>}

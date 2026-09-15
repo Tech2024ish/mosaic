@@ -109,6 +109,40 @@ def test_email_verification_enables_login_and_is_one_time(
     assert "invalid%20or%20expired" in reused.headers["location"]
 
 
+def test_forgot_password_resets_password_and_revokes_old_sessions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = registration_payload()
+    captured: dict[str, str] = {}
+
+    def capture_reset(email: str, name: str, token: str) -> None:
+        captured["token"] = token
+
+    monkeypatch.setattr(auth_router, "send_password_reset_email", capture_reset)
+    client = TestClient(app)
+    assert client.post("/api/v1/auth/register", json=payload).status_code == 201
+    verify_test_user(payload["email"])
+    assert client.post("/api/v1/auth/login", json=payload).status_code == 200
+
+    assert (
+        client.post("/api/v1/auth/forgot-password", json={"email": payload["email"]}).status_code
+        == 202
+    )
+    reset = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": captured["token"], "new_password": "New secure password 456!"},
+    )
+    assert reset.status_code == 204
+    assert client.post("/api/v1/auth/login", json=payload).status_code == 401
+    assert (
+        client.post(
+            "/api/v1/auth/login",
+            json={"email": payload["email"], "password": "New secure password 456!"},
+        ).status_code
+        == 200
+    )
+
+
 def test_inactive_user_cannot_login() -> None:
     payload = registration_payload()
     client = TestClient(app)

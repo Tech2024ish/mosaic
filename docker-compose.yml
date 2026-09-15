@@ -37,6 +37,7 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@mosaic.local}
       SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      PASSWORD_RESET_EXPIRE_MINUTES: ${PASSWORD_RESET_EXPIRE_MINUTES:-30}
     ports:
       - "8000:8000"
     depends_on:
