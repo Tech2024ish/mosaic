@@ -20,6 +20,7 @@ type TrendItem = { period: string; sales_count: number; total_quantity: Analytic
 type SalesGroup = { key: string; label: string | null; sales_count: number; total_quantity: AnalyticsValue; total_revenue: AnalyticsValue; average_sale_value: AnalyticsValue };
 type AnalyticsGroupBy = "date" | "product" | "warehouse";
 type AnalyticsPeriod = "day" | "week" | "month";
+type PerformanceSort = "revenue" | "quantity" | "transactions";
 type RankedItem = { rank: number; product_code?: string; product_name?: string | null; warehouse_code?: string; warehouse_name?: string | null; sales_count: number; quantity_sold: AnalyticsValue; revenue: AnalyticsValue };
 type ReportType = "sales" | "products" | "inventory" | "warehouses";
 type ReportItem = RankedItem & { snapshot_date?: string; quantity_on_hand?: AnalyticsValue; unit_cost?: AnalyticsValue | null };
@@ -74,6 +75,10 @@ function App() {
   const [analyticsTrend, setAnalyticsTrend] = useState<TrendItem[]>([]);
   const [topProducts, setTopProducts] = useState<RankedItem[]>([]);
   const [warehousePerformance, setWarehousePerformance] = useState<RankedItem[]>([]);
+  const [performanceProductSearch, setPerformanceProductSearch] = useState("");
+  const [performanceWarehouseSearch, setPerformanceWarehouseSearch] = useState("");
+  const [performanceSort, setPerformanceSort] = useState<PerformanceSort>("revenue");
+  const [performanceOrder, setPerformanceOrder] = useState<"asc" | "desc">("desc");
   const [analyticsMessage, setAnalyticsMessage] = useState("");
   const [analyticsDateFrom, setAnalyticsDateFrom] = useState("");
   const [analyticsDateTo, setAnalyticsDateTo] = useState("");
@@ -232,14 +237,20 @@ function App() {
       groupParams.set("date_to", appliedDateTo);
     }
     const query = analyticsParams.toString();
+    const productPerformanceParams = new URLSearchParams({ limit: "20", sort: performanceSort, order: performanceOrder });
+    const warehousePerformanceParams = new URLSearchParams({ limit: "20", sort: performanceSort, order: performanceOrder });
+    if (appliedDateFrom) { productPerformanceParams.set("date_from", appliedDateFrom); warehousePerformanceParams.set("date_from", appliedDateFrom); }
+    if (appliedDateTo) { productPerformanceParams.set("date_to", appliedDateTo); warehousePerformanceParams.set("date_to", appliedDateTo); }
+    if (performanceProductSearch.trim()) productPerformanceParams.set("product_code", performanceProductSearch.trim());
+    if (performanceWarehouseSearch.trim()) warehousePerformanceParams.set("warehouse_code", performanceWarehouseSearch.trim());
     const trendParams = new URLSearchParams({ period: analyticsPeriod });
     if (appliedDateFrom) trendParams.set("date_from", appliedDateFrom);
     if (appliedDateTo) trendParams.set("date_to", appliedDateTo);
     const responses = await Promise.all([
       apiFetch(`${API_URL}/api/v1/analytics/summary${query ? `?${query}` : ""}`),
       apiFetch(`${API_URL}/api/v1/analytics/sales/trend?${trendParams.toString()}`),
-      apiFetch(`${API_URL}/api/v1/analytics/products/top?limit=5${query ? `&${query}` : ""}`),
-      apiFetch(`${API_URL}/api/v1/analytics/warehouses/performance?limit=5${query ? `&${query}` : ""}`),
+      apiFetch(`${API_URL}/api/v1/analytics/products/top?${productPerformanceParams.toString()}`),
+      apiFetch(`${API_URL}/api/v1/analytics/warehouses/performance?${warehousePerformanceParams.toString()}`),
       apiFetch(`${API_URL}/api/v1/analytics/sales?${groupParams.toString()}`),
     ]).catch(() => null);
     if (!responses) {
@@ -472,6 +483,27 @@ function App() {
       </>}
     </section>
   );
+  const performanceDashboard = token && (
+    <section className="performance-dashboard" id="performance" aria-labelledby="performance-title">
+      <div className="dashboard-heading">
+        <div><p className="eyebrow">Performance intelligence</p><h1 id="performance-title">Product & warehouse performance</h1><p className="dashboard-subtitle">Compare revenue, units, and transactions using the same tenant-scoped sales analytics.</p></div>
+        <button className="button button-gold" type="button" onClick={refreshAnalytics} disabled={analyticsLoading}>{analyticsLoading ? "Refreshing..." : "Refresh performance"}</button>
+      </div>
+      <div className="performance-filters" aria-label="Performance filters">
+        <label>Product code<input value={performanceProductSearch} onChange={(event) => setPerformanceProductSearch(event.target.value)} placeholder="All products" /></label>
+        <label>Warehouse code<input value={performanceWarehouseSearch} onChange={(event) => setPerformanceWarehouseSearch(event.target.value)} placeholder="All warehouses" /></label>
+        <label>Rank by<select value={performanceSort} onChange={(event) => setPerformanceSort(event.target.value as PerformanceSort)}><option value="revenue">Revenue</option><option value="quantity">Units sold</option><option value="transactions">Transactions</option></select></label>
+        <label>Order<select value={performanceOrder} onChange={(event) => setPerformanceOrder(event.target.value as "asc" | "desc")}><option value="desc">Highest first</option><option value="asc">Lowest first</option></select></label>
+        <button className="button button-dark performance-apply" type="button" onClick={refreshAnalytics} disabled={analyticsLoading}>Apply</button>
+      </div>
+      {analyticsMessage && <div className="dashboard-alert" role="alert">{analyticsMessage}<button className="text-link" type="button" onClick={refreshAnalytics}>Retry</button></div>}
+      {analyticsLoading ? <div className="dashboard-loading-card" role="status">Loading performance data...</div> : <div className="performance-grid">
+        <section className="dashboard-panel" aria-labelledby="performance-products-title"><div className="panel-heading"><div><p className="eyebrow">Products</p><h2 id="performance-products-title">Product performance</h2></div><span className="panel-meta">{performanceSort}</span></div>{topProducts.length === 0 ? <p className="panel-empty">No matching product performance data.</p> : <div className="performance-table"><div className="performance-table-head"><span>Product</span><span>Revenue</span><span>Units</span><span>Transactions</span></div>{topProducts.map((item) => <div className="performance-table-row" key={`performance-product-${item.product_code}`}><div><strong>{item.product_name ?? item.product_code}</strong><small>{item.product_code}</small></div><b>{String(item.revenue)}</b><span>{String(item.quantity_sold)}</span><span>{item.sales_count}</span></div>)}</div>}</section>
+        <section className="dashboard-panel" aria-labelledby="performance-warehouses-title"><div className="panel-heading"><div><p className="eyebrow">Warehouses</p><h2 id="performance-warehouses-title">Warehouse performance</h2></div><span className="panel-meta">{performanceSort}</span></div>{warehousePerformance.length === 0 ? <p className="panel-empty">No matching warehouse performance data.</p> : <div className="performance-table"><div className="performance-table-head"><span>Warehouse</span><span>Revenue</span><span>Units</span><span>Transactions</span></div>{warehousePerformance.map((item) => <div className="performance-table-row" key={`performance-warehouse-${item.warehouse_code}`}><div><strong>{item.warehouse_name ?? item.warehouse_code}</strong><small>{item.warehouse_code}</small></div><b>{String(item.revenue)}</b><span>{String(item.quantity_sold)}</span><span>{item.sales_count}</span></div>)}</div>}</section>
+      </div>}
+    </section>
+  );
+
   const decisionDashboard = token && (
     <section className="decision-dashboard" id="decision-overview" aria-labelledby="decision-overview-title">
       <div className="dashboard-heading">
@@ -519,6 +551,7 @@ function App() {
     <main>
       {decisionDashboard}
       {inventoryDashboard}
+      {performanceDashboard}
       {masterDataCreatePanel}
       {masterDataEditPanel}
       {importAttemptsPanel}
