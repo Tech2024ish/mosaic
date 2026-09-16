@@ -110,3 +110,12 @@ The authenticated Overview uses the analytics query and existing trend/ranking e
 The Inventory Intelligence workspace reads the existing inventory snapshot history and presents the latest current position per product and warehouse. Its APIs are `GET /api/v1/inventory/summary`, `GET /api/v1/inventory/by-warehouse?offset=0&limit=50&search=...`, and `GET /api/v1/inventory/by-product?offset=0&limit=50&search=...&warehouse_id=...&status=in_stock|out_of_stock&sort=code|name|quantity|warehouses&order=asc|desc`.
 
 All inputs are bounded and tenant-scoped. A product is `in_stock` when its summed latest quantity is greater than zero; otherwise it is `out_of_stock`. Warehouses use the same current-position rule. The system does not claim low-stock status because products do not currently carry a reorder threshold. Historical snapshots remain available through the existing `/api/v1/inventory` endpoint and are never overwritten by the intelligence view.
+
+## Phase 15 product and warehouse performance
+
+Performance rankings are available from the existing analytics API:
+
+- `/api/v1/analytics/products/top?limit=10&sort=revenue&order=desc`
+- `/api/v1/analytics/warehouses/performance?limit=10&sort=revenue&order=desc`
+
+Both endpoints support the existing date range and business-code filters. Supported sort fields are `revenue`, `quantity`, and `transactions`; limits are bounded to 100. Results are aggregated in PostgreSQL and scoped to the authenticated organization. The frontend exposes the same controls in the Product & Warehouse Performance workspace. No migration was required.

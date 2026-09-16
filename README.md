@@ -204,3 +204,7 @@ Reports accept validated date, product, warehouse, period, and bounded limit fil
 The authenticated workspace includes an Inventory Intelligence view built on the existing historical `inventory_snapshots` model. `GET /api/v1/inventory/summary` reports current total units, products with available units, warehouses holding available units, and products with no available units. `GET /api/v1/inventory/by-warehouse` and `GET /api/v1/inventory/by-product` provide bounded, tenant-scoped current-position views with search, status filtering, and whitelisted sorting.
 
 Current position means the latest snapshot for each organization/product/warehouse combination. The platform exposes `in_stock` and `out_of_stock` only; no low-stock threshold is fabricated because the schema has no reorder-level policy. No migration was required. The frontend Inventory Intelligence page uses the authenticated API client and keeps loading, empty, retry, and responsive states consistent with the Overview workspace.
+
+## Phase 15 product and warehouse performance
+
+The authenticated workspace provides a Product & Warehouse Performance view. It reuses the existing tenant-scoped analytics endpoints to rank products and warehouses by revenue, units sold, or transaction count, with bounded results, safe ordering, optional date ranges, and exact business-code filters. Aggregation remains in PostgreSQL; no second analytics store or migration was introduced. The view is descriptive only, with forecasting, recommendations, and optimization deferred.
