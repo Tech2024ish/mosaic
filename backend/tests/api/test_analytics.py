@@ -291,3 +291,33 @@ def test_sales_query_supports_safe_grouping_and_filters() -> None:
     assert (
         client.get("/api/v1/analytics/sales?group_by=unknown", headers=headers).status_code == 422
     )
+
+
+def test_product_and_warehouse_performance_support_safe_sorting() -> None:
+    client = TestClient(app)
+    headers, organization_id = account(client)
+    seed_tenant(
+        organization_id,
+        "PERF-A",
+        "PERF-W-A",
+        [
+            ("PERF-A-1", date(2026, 4, 1), "1", "10", "PERF-W-A-1"),
+            ("PERF-A-2", date(2026, 4, 1), "5", "2", "PERF-W-A-2"),
+        ],
+    )
+
+    products = client.get(
+        "/api/v1/analytics/products/top?sort=quantity&order=desc", headers=headers
+    )
+    assert products.status_code == 200
+    assert products.json()["items"][0]["product_code"] == "PERF-A-2"
+
+    warehouses = client.get(
+        "/api/v1/analytics/warehouses/performance?sort=transactions&order=asc",
+        headers=headers,
+    )
+    assert warehouses.status_code == 200
+    assert warehouses.json()["items"][0]["warehouse_code"] == "PERF-W-A-1"
+
+    invalid = client.get("/api/v1/analytics/products/top?sort=profit", headers=headers)
+    assert invalid.status_code == 422

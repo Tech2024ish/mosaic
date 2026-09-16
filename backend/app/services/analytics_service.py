@@ -327,8 +327,16 @@ def top_products(
     date_to: date | None = None,
     product_code: str | None = None,
     warehouse_code: str | None = None,
+    sort: str = "revenue",
+    descending: bool = True,
 ) -> TopProductsResponse:
     revenue = SalesHistory.quantity * SalesHistory.unit_price
+    sort_expressions: dict[str, Any] = {
+        "revenue": func.sum(revenue),
+        "quantity": func.sum(SalesHistory.quantity),
+        "transactions": func.count(SalesHistory.id),
+    }
+    sort_expression = sort_expressions.get(sort, sort_expressions["revenue"])
     statement = (
         _sales_statement(organization_id, date_from, date_to, product_code, warehouse_code)
         .join(
@@ -347,7 +355,10 @@ def top_products(
             func.coalesce(func.sum(revenue), 0),
         )
         .group_by(SalesHistory.product_code)
-        .order_by(func.sum(revenue).desc(), SalesHistory.product_code)
+        .order_by(
+            sort_expression.desc() if descending else sort_expression.asc(),
+            SalesHistory.product_code,
+        )
         .limit(limit)
     )
     rows = db.execute(statement).all()
@@ -374,8 +385,16 @@ def warehouse_performance(
     date_to: date | None = None,
     product_code: str | None = None,
     warehouse_code: str | None = None,
+    sort: str = "revenue",
+    descending: bool = True,
 ) -> WarehousePerformanceResponse:
     revenue = SalesHistory.quantity * SalesHistory.unit_price
+    sort_expressions: dict[str, Any] = {
+        "revenue": func.sum(revenue),
+        "quantity": func.sum(SalesHistory.quantity),
+        "transactions": func.count(SalesHistory.id),
+    }
+    sort_expression = sort_expressions.get(sort, sort_expressions["revenue"])
     statement = (
         _sales_statement(organization_id, date_from, date_to, product_code, warehouse_code)
         .join(
@@ -394,7 +413,10 @@ def warehouse_performance(
             func.coalesce(func.sum(revenue), 0),
         )
         .group_by(SalesHistory.warehouse_code)
-        .order_by(func.sum(revenue).desc(), SalesHistory.warehouse_code)
+        .order_by(
+            sort_expression.desc() if descending else sort_expression.asc(),
+            SalesHistory.warehouse_code,
+        )
         .limit(limit)
     )
     rows = db.execute(statement).all()

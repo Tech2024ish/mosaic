@@ -105,6 +105,8 @@ def products_top(
         query.date_to,
         query.product_code,
         query.warehouse_code,
+        query.sort,
+        query.order == "desc",
     )
 
 
@@ -123,6 +125,8 @@ def warehouses_performance(
         query.date_to,
         query.product_code,
         query.warehouse_code,
+        query.sort,
+        query.order == "desc",
     )
 
 

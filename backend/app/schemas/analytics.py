@@ -36,6 +36,8 @@ class TrendQuery(AnalyticsQuery):
 
 class TopItemsQuery(AnalyticsQuery):
     limit: int = Field(default=10, ge=1, le=100)
+    sort: str = Field(default="revenue", pattern="^(revenue|quantity|transactions)$")
+    order: str = Field(default="desc", pattern="^(asc|desc)$")
 
 
 class AnalyticsSummaryResponse(BaseModel):

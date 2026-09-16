@@ -26,12 +26,18 @@ def send_verification_email(email: str, name: str, token: str) -> None:
         )
         logger.warning("SMTP is not configured; verification email was not sent")
         return
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
-        if settings.smtp_use_tls:
-            smtp.starttls()
-        if settings.smtp_username and settings.smtp_password:
-            smtp.login(settings.smtp_username, settings.smtp_password)
-        smtp.send_message(message)
+    try:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
+            if settings.smtp_use_tls:
+                smtp.starttls()
+            if settings.smtp_username and settings.smtp_password:
+                smtp.login(settings.smtp_username, settings.smtp_password)
+            smtp.send_message(message)
+    except (OSError, smtplib.SMTPException):
+        logger.exception(
+            "Email verification delivery failed",
+            extra={"event_name": "email_verification_delivery_failed", "recipient": email},
+        )
 
 
 def send_password_reset_email(email: str, name: str, token: str) -> None:
@@ -55,9 +61,15 @@ def send_password_reset_email(email: str, name: str, token: str) -> None:
     if not settings.smtp_host:
         logger.warning("SMTP is not configured; password reset email was not sent")
         return
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
-        if settings.smtp_use_tls:
-            smtp.starttls()
-        if settings.smtp_username and settings.smtp_password:
-            smtp.login(settings.smtp_username, settings.smtp_password)
-        smtp.send_message(message)
+    try:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
+            if settings.smtp_use_tls:
+                smtp.starttls()
+            if settings.smtp_username and settings.smtp_password:
+                smtp.login(settings.smtp_username, settings.smtp_password)
+            smtp.send_message(message)
+    except (OSError, smtplib.SMTPException):
+        logger.exception(
+            "Password reset delivery failed",
+            extra={"event_name": "password_reset_delivery_failed", "recipient": email},
+        )
