@@ -28,6 +28,10 @@ type ReportResult = { report_type: ReportType; summary?: Partial<AnalyticsSummar
 type InventorySummary = { total_inventory_units: AnalyticsValue; products_with_inventory: number; warehouses_with_inventory: number; out_of_stock_products: number };
 type InventoryWarehouse = { warehouse_id: string; warehouse_code: string; warehouse_name: string; total_quantity: AnalyticsValue; product_count: number; status: "in_stock" | "out_of_stock" };
 type InventoryProduct = { product_id: string; product_code: string; product_name: string; total_quantity: AnalyticsValue; warehouse_count: number; status: "in_stock" | "out_of_stock" };
+type InsightRecord = { code: string; category: "positive" | "negative" | "neutral" | "informational" | "attention"; title: string; description: string; metric: AnalyticsValue | null; metric_label: string | null };
+type ComparisonMetric = { name: string; current_value: AnalyticsValue; previous_value: AnalyticsValue; change: AnalyticsValue; change_percent: AnalyticsValue | null; category: InsightRecord["category"] };
+type InsightsOverview = { summary: AnalyticsSummary; inventory: InventorySummary; top_products: RankedItem[]; warehouse_performance: RankedItem[]; insights: InsightRecord[] };
+type ComparisonResult = { metrics: ComparisonMetric[]; insights: InsightRecord[]; current_period: { date_from: string | null; date_to: string | null }; previous_period: { date_from: string | null; date_to: string | null } };
 
 function App() {
   const [apiStatus, setApiStatus] = useState("checking connection");
@@ -100,6 +104,10 @@ function App() {
   const [inventoryOutOfStock, setInventoryOutOfStock] = useState<InventoryProduct[]>([]);
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [inventoryMessage, setInventoryMessage] = useState("");
+  const [insightsOverview, setInsightsOverview] = useState<InsightsOverview | null>(null);
+  const [comparisonResult, setComparisonResult] = useState<ComparisonResult | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsMessage, setInsightsMessage] = useState("");
 
   const apiFetch = (url: string, init: RequestInit = {}) => fetch(url, {
     ...init, headers: { ...(init.headers ?? {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -217,6 +225,31 @@ function App() {
     }
   };
 
+  const refreshInsights = async () => {
+    if (!token) return;
+    setInsightsLoading(true);
+    setInsightsMessage("");
+    const params = new URLSearchParams({ limit: "5" });
+    if (appliedDateFrom) params.set("date_from", appliedDateFrom);
+    if (appliedDateTo) params.set("date_to", appliedDateTo);
+    const comparisonParams = new URLSearchParams(params);
+    const responses = await Promise.all([
+      apiFetch(`${API_URL}/api/v1/insights/overview?${params.toString()}`),
+      appliedDateFrom && appliedDateTo
+        ? apiFetch(`${API_URL}/api/v1/insights/comparison?${comparisonParams.toString()}`)
+        : Promise.resolve(null),
+    ]).catch(() => null);
+    if (!responses || !responses[0]?.ok) {
+      setInsightsMessage("Business insights could not be loaded. Please retry.");
+      setInsightsLoading(false);
+      return;
+    }
+    setInsightsOverview(await responses[0].json());
+    if (responses[1]?.ok) setComparisonResult(await responses[1].json());
+    else setComparisonResult(null);
+    setInsightsLoading(false);
+  };
+
   const refreshAnalytics = async () => {
     if (!token) return;
     setAnalyticsLoading(true);
@@ -312,6 +345,7 @@ function App() {
   useEffect(() => { refreshMasterData(); }, [token, masterType]);
   useEffect(() => { refreshMasterReferences(); }, [token]);
   useEffect(() => { refreshInventory(); }, [token]);
+  useEffect(() => { refreshInsights(); }, [token, appliedDateFrom, appliedDateTo]);
   const applyAnalyticsFilters = () => {
     setAppliedDateFrom(analyticsDateFrom);
     setAppliedDateTo(analyticsDateTo);
@@ -504,6 +538,23 @@ function App() {
     </section>
   );
 
+  const insightsDashboard = token && (
+    <section className="insights-dashboard" id="insights" aria-labelledby="insights-title">
+      <div className="dashboard-heading">
+        <div><p className="eyebrow">Decision support</p><h1 id="insights-title">Business insights</h1><p className="dashboard-subtitle">Deterministic observations from your selected sales and inventory data.</p></div>
+        <button className="button button-gold" type="button" onClick={refreshInsights} disabled={insightsLoading}>{insightsLoading ? "Refreshing..." : "Refresh insights"}</button>
+      </div>
+      {insightsMessage && <div className="dashboard-alert" role="alert">{insightsMessage}<button className="text-link" type="button" onClick={refreshInsights}>Retry</button></div>}
+      {insightsLoading ? <div className="dashboard-loading-card" role="status">Loading business insights...</div> : !insightsOverview ? <div className="dashboard-empty" role="status"><strong>No insight data available</strong><span>Apply a date range or add sales data to generate decision support.</span></div> : <>
+        <div className="insight-summary-grid">
+          {insightsOverview.insights.length === 0 ? <p className="panel-empty">No notable observations for this period.</p> : insightsOverview.insights.map((insight) => <article className={`insight-card insight-${insight.category}`} key={insight.code}><span>{insight.category}</span><strong>{insight.title}</strong><p>{insight.description}</p></article>)}
+        </div>
+        {comparisonResult && <section className="dashboard-panel" aria-labelledby="comparison-title"><div className="panel-heading"><div><p className="eyebrow">Period comparison</p><h2 id="comparison-title">Current period vs previous comparable period</h2></div></div><div className="comparison-grid">{comparisonResult.metrics.map((metric) => <article className="comparison-card" key={metric.name}><span>{metric.name.replaceAll("_", " ")}</span><strong>{String(metric.current_value)}</strong><small>Previous: {String(metric.previous_value)} · Change: {String(metric.change_percent ?? "n/a")} %</small></article>)}</div></section>}
+        <div className="dashboard-main-grid dashboard-tables-grid"><section className="dashboard-panel" aria-labelledby="insight-products-title"><div className="panel-heading"><div><p className="eyebrow">Products</p><h2 id="insight-products-title">Leading products</h2></div></div>{insightsOverview.top_products.length === 0 ? <p className="panel-empty">No product activity for this period.</p> : <div className="dashboard-table">{insightsOverview.top_products.map((item) => <div className="dashboard-table-row" key={`insight-product-${item.product_code}`}><span className="rank">{item.rank}</span><div><strong>{item.product_name ?? item.product_code}</strong><small>{String(item.quantity_sold)} units · {item.sales_count} transactions</small></div><b>{String(item.revenue)}</b></div>)}</div>}</section><section className="dashboard-panel" aria-labelledby="insight-warehouses-title"><div className="panel-heading"><div><p className="eyebrow">Warehouses</p><h2 id="insight-warehouses-title">Sales distribution</h2></div></div>{insightsOverview.warehouse_performance.length === 0 ? <p className="panel-empty">No warehouse activity for this period.</p> : <div className="dashboard-table">{insightsOverview.warehouse_performance.map((item) => <div className="dashboard-table-row" key={`insight-warehouse-${item.warehouse_code}`}><span className="rank">{item.rank}</span><div><strong>{item.warehouse_name ?? item.warehouse_code}</strong><small>{String(item.quantity_sold)} units · {item.sales_count} transactions</small></div><b>{String(item.revenue)}</b></div>)}</div>}</section></div>
+      </>}
+    </section>
+  );
+
   const decisionDashboard = token && (
     <section className="decision-dashboard" id="decision-overview" aria-labelledby="decision-overview-title">
       <div className="dashboard-heading">
@@ -552,13 +603,13 @@ function App() {
       {decisionDashboard}
       {inventoryDashboard}
       {performanceDashboard}
+      {insightsDashboard}
       {masterDataCreatePanel}
       {masterDataEditPanel}
       {importAttemptsPanel}
       {token && <div className="dashboard-toolbar" aria-live="polite"><label>Trend period<select value={analyticsPeriod} onChange={(event) => setAnalyticsPeriod(event.target.value as AnalyticsPeriod)}><option value="day">Daily</option><option value="week">Weekly</option><option value="month">Monthly</option></select></label>{analyticsLoading && <span className="dashboard-loading">Refreshing decision data…</span>}</div>}
       {token && <section className="operations-section analytics-query" id="sales-query"><div className="operations-heading"><div><p className="eyebrow">Sales query</p><h2>Explore grouped performance</h2></div><button className="button button-ghost" type="button" onClick={refreshAnalytics}>Refresh</button></div><div className="report-filters"><label>Group by<select value={analyticsGroupBy} onChange={(event) => setAnalyticsGroupBy(event.target.value as AnalyticsGroupBy)}><option value="product">Product</option><option value="warehouse">Warehouse</option><option value="date">Date</option></select></label><label>From<input type="date" value={analyticsDateFrom} onChange={(event) => setAnalyticsDateFrom(event.target.value)} /></label><label>To<input type="date" value={analyticsDateTo} onChange={(event) => setAnalyticsDateTo(event.target.value)} /></label></div>{salesGroups.length === 0 ? <p className="empty-state">No grouped sales match these filters.</p> : <div className="history-list">{salesGroups.map((item) => <article className="history-row" key={item.key}><div><strong>{item.label ?? item.key}</strong><small>{item.sales_count} transactions · {String(item.total_quantity)} units</small></div><span>{String(item.total_revenue)}</span></article>)}</div>}</section>}
       {!token && <PublicHome />}
-      {!token && authMode === "login" && !resetSent && <button className="forgot-password-link" type="button" onClick={requestPasswordReset}>Forgot password?</button>}
       {!token && authMode === "login" && resetSent && <button className="resend-password-link" type="button" onClick={requestPasswordReset}>Resend</button>}
       {!token && authMode === "reset" && <label className="reset-confirm-field">Confirm new password <em>*</em><span className="password-field"><input type={showConfirmPassword ? "text" : "password"} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Re-enter your new password" minLength={12} required /><button type="button" onClick={() => setShowConfirmPassword((visible) => !visible)} aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"}>{showConfirmPassword ? "Hide" : "Show"}</button></span></label>}
       <section className="access-section" id="access"><div className="section-intro"><p className="eyebrow">MOSAIC workspace</p><h2>{authMode === "login" ? "Welcome back" : "Create your account"}</h2><p>Securely connect your operational data and turn it into decisions your business can explain.</p></div>{!token ? <form className="auth-card" onSubmit={authenticate}><div className="card-heading"><span className="card-mark">✦</span><div><p className="eyebrow">MOSAIC workspace</p><h2>{authMode === "login" ? "Sign in to MOSAIC" : "Create your account"}</h2></div></div><button className="google-button" type="button" onClick={startGoogleSignIn}><span aria-hidden="true">G</span>Continue with Google</button><div className="auth-divider"><span>or</span></div><div className="tabs"><button type="button" className={authMode === "login" ? "selected" : ""} onClick={() => { setAuthMode("login"); setAuthMessage(""); }}>Sign in</button><button type="button" className={authMode === "register" ? "selected" : ""} onClick={() => { setAuthMode("register"); setAuthMessage(""); }}>Create account</button></div>{authMode === "register" && <label>Full name <em>*</em><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" required /></label>}<label>Email <em>*</em><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label><label>Password <em>*</em><span className="password-field"><input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 12 characters" minLength={12} required /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? "Hide" : "Show"}</button></span></label>{authMode === "register" && <><p className="password-help">Use at least 12 characters. Avoid reusing a password from another service.</p><label>Confirm password <em>*</em><span className="password-field"><input type={showConfirmPassword ? "text" : "password"} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Re-enter your password" minLength={12} required /><button type="button" onClick={() => setShowConfirmPassword((visible) => !visible)} aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"}>{showConfirmPassword ? "Hide" : "Show"}</button></span></label></>}<button className="button button-dark submit-button" type="submit">{authMode === "login" ? "Sign in" : "Create account"}</button>{authMessage && <p className={authMessage.includes("created") || authMessage.includes("success") ? "success-message" : "error-message"}>{authMessage}</p>}<p className="privacy-note">By continuing, you agree to use this tenant-isolated workspace responsibly.</p></form> : <form className="auth-card import-form" id="ingestion" onSubmit={submitImport}><div className="card-heading"><span className="card-mark">↗</span><div><p className="eyebrow">Data intake</p><h2>Import operational data</h2></div></div><p className="card-description">Upload a CSV and MOSAIC will validate, normalize, and stage it safely.</p><label>Dataset<select value={datasetType} onChange={(event) => setDatasetType(event.target.value as DatasetType)}><option value="sales_history">Sales history</option><option value="products">Products</option><option value="warehouses">Warehouses</option><option value="suppliers">Suppliers</option><option value="inventory_snapshots">Inventory snapshots</option></select></label><label className="file-drop"><input type="file" accept=".csv,text/csv" onChange={(event: ChangeEvent<HTMLInputElement>) => setFile(event.target.files?.[0] ?? null)} /><span className="upload-icon">↑</span><strong>{file ? file.name : "Choose a CSV file"}</strong><small>{file ? `${(file.size / 1024).toFixed(1)} KB selected` : "Maximum file size: 25 MB"}</small></label><button className="button button-dark submit-button" type="submit" disabled={!file}>Start secure import <span>→</span></button>{job && <p className="summary">Job {job.id.slice(0, 8)} · {job.status} · {job.successful_rows}/{job.total_rows} rows accepted{job.failed_rows ? ` · ${job.failed_rows} rejected` : ""}</p>}{message && <p className="error-message">{message}</p>}</form>}</section>

@@ -272,9 +272,6 @@ nav { display: flex; gap: 30px; margin-right: auto; color: #61716b; font-size: .
 .app-shell:not(.workspace-shell) .feature-strip p { font-size: .76rem; line-height: 1.42; }
 .app-shell:not(.workspace-shell) .public-footer-brand p, .app-shell:not(.workspace-shell) .public-footer-main a { font-size: .7rem; }
 .app-shell:not(.workspace-shell) .public-footer h2 { font-size: .88rem; }
-.forgot-password-link { display: block; margin: 12px auto 0; border: 0; background: transparent; color: var(--green); cursor: pointer; font: inherit; font-size: .8rem; text-decoration: underline; }
-.app-shell.access-open:not(.workspace-shell) .forgot-password-link { position: fixed; z-index: 20; left: 50%; bottom: 24px; transform: translateX(-50%); margin: 0; padding: 9px 14px; border: 1px solid #d8e5d9; border-radius: 999px; background: #fff; box-shadow: 0 8px 24px #163a2820; white-space: nowrap; }
-.app-shell.access-open:not(.workspace-shell) .forgot-password-link:hover { color: #064f31; background: #f5faf4; }
 .app-shell.access-open:not(.workspace-shell) .topbar { justify-content: center; }
 .app-shell.access-open:not(.workspace-shell) .brand { margin: 0; color: #0fa15a; font-size: 1.8rem; }
 .app-shell.access-open:not(.workspace-shell) .access-section { max-width: 505px; padding-top: 30px; }
@@ -291,8 +288,6 @@ nav { display: flex; gap: 30px; margin-right: auto; color: #61716b; font-size: .
 .app-shell.access-open:not(.workspace-shell) .auth-card .submit-button { order: 6; padding: 13px; border-radius: 8px; }
 .app-shell.access-open:not(.workspace-shell) .auth-card .privacy-note, .app-shell.access-open:not(.workspace-shell) .auth-card .success-message, .app-shell.access-open:not(.workspace-shell) .auth-card .error-message { order: 7; }
 .app-shell.access-open:not(.workspace-shell) { position: relative; }
-.app-shell.access-open:not(.workspace-shell) .forgot-password-link { position: absolute; z-index: 20; top: 396px; left: calc(50% + 120px); bottom: auto; transform: none; margin: 0; padding: 4px 0; color: #0fa15a; border: 0; background: transparent; box-shadow: none; font-weight: 700; }
-.app-shell.access-open:not(.workspace-shell) .forgot-password-link:hover { background: transparent; box-shadow: none; transform: none; }
 .resend-password-link { position: absolute; z-index: 20; top: 396px; left: calc(50% + 120px); padding: 4px 0; border: 0; color: #0fa15a; background: transparent; font: inherit; font-size: .68rem; font-weight: 700; cursor: pointer; }
 .resend-password-link:hover { color: #0fa15a; }
 .reset-confirm-field { position: absolute; z-index: 20; top: 425px; left: 50%; width: 451px; transform: translateX(-50%); color: #b3d2b9; font-size: .62rem; }
@@ -309,7 +304,6 @@ nav { display: flex; gap: 30px; margin-right: auto; color: #61716b; font-size: .
 .app-shell.access-open:not(.workspace-shell):has(.reset-confirm-field) .submit-button { font-size: 0; }
 .app-shell.access-open:not(.workspace-shell):has(.reset-confirm-field) .submit-button::after { content: "Reset password"; font-size: .78rem; }
 @media (max-width: 520px) { .reset-confirm-field { top: 408px; right: 18px; left: 18px; width: auto; transform: none; }.app-shell.access-open:not(.workspace-shell):has(.reset-confirm-field) .auth-card { min-height: 555px; } }
-@media (max-width: 520px) { .app-shell.access-open:not(.workspace-shell) .forgot-password-link { top: 379px; right: 28px; left: auto; } }
 @media (max-width: 520px) { .resend-password-link { top: 379px; right: 28px; left: auto; } }
 .performance-dashboard { max-width: 1120px; margin: 0 auto 10px; padding: 24px 0 0; }
 .performance-filters { display: grid; grid-template-columns: 1fr 1fr .8fr .8fr auto; gap: 10px; align-items: end; margin-bottom: 10px; }
@@ -328,3 +322,13 @@ nav { display: flex; gap: 30px; margin-right: auto; color: #61716b; font-size: .
 .performance-table-row > span { color: #4e6759; }
 @media (max-width: 900px) { .performance-filters { grid-template-columns: 1fr 1fr; }.performance-apply { width: 100%; }.performance-grid { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .performance-dashboard { padding-top: 16px; }.performance-filters { grid-template-columns: 1fr; }.performance-table-head { display: none; }.performance-table-row { grid-template-columns: minmax(0, 1fr) auto; gap: 7px; padding: 9px 0; }.performance-table-row b, .performance-table-row > span { justify-self: end; }.performance-table-row > span:last-child::before { content: "txn "; color: #89968f; } }
+.insights-dashboard { margin: 0 auto 18px; max-width: 1180px; }
+.insight-summary-grid, .comparison-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+.insight-card, .comparison-card { border: 1px solid #d1cec0; border-radius: 4px; background: #fffefb; padding: 15px; box-shadow: 0 3px 10px #423b2508; }
+.insight-card > span, .comparison-card > span { color: #8f782e; font-size: .56rem; text-transform: uppercase; letter-spacing: .08em; }
+.insight-card strong, .comparison-card strong { display: block; margin-top: 8px; color: #073f2b; font-size: .9rem; }
+.insight-card p { margin: 8px 0 0; color: #53635a; font-size: .72rem; line-height: 1.5; }
+.insight-positive { border-top: 3px solid #1d664c; }.insight-negative, .insight-attention { border-top: 3px solid #b56a32; }.insight-informational { border-top: 3px solid #8f782e; }
+.comparison-card small { display: block; margin-top: 8px; color: #68756d; font-size: .68rem; }
+@media (max-width: 900px) { .insight-summary-grid, .comparison-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .insight-summary-grid, .comparison-grid { grid-template-columns: 1fr; } }
