@@ -128,3 +128,7 @@ The authenticated Business Insights view is backed by:
 - `GET /api/v1/insights/comparison?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
 
 Overview observations combine existing sales rankings and current inventory data. Comparison uses the immediately preceding period with the same number of days and reports current value, previous value, absolute change, and percentage change where the previous value is non-zero. Results are tenant-scoped, deterministic, and descriptive; forecasting and recommendations are deferred.
+
+## Production ingestion operations
+
+Production deployments must provide PostgreSQL connection settings, storage location, upload/report limits, and explicit CORS origins through environment variables. The existing Docker entrypoint applies migrations before starting the API; import processing remains in-process and retains its documented restart-durability limitation. Use `/health` and `/ready` before exercising authenticated imports, then verify import history, retry, cancellation, validation reports, and tenant-scoped statistics with a test account.

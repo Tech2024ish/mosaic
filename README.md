@@ -55,6 +55,12 @@ alembic -c backend/alembic.ini upgrade head
 
 For local frontend development, copy `frontend/.env.example` to `frontend/.env` when the API is not running at `http://localhost:8000`. The frontend reads `VITE_API_URL` at build time; it never embeds credentials, tokens, or tenant identifiers.
 
+## Production deployment foundation
+
+Set `ENVIRONMENT=production` for deployment. Production configuration rejects debug mode, development signing keys, the default database password, SQLite, wildcard/local CORS origins, and invalid limits. Provide `DATABASE_URL` or the `DB_*` variables, a generated `SECRET_KEY`, explicit `BACKEND_CORS_ORIGINS`, `FRONTEND_URL`, and `BACKEND_URL`. `VITE_*` values are public build-time configuration and must not contain secrets.
+
+From `backend`, apply migrations with `py -m alembic upgrade head`, then start the API with `uvicorn app.main:app --host 0.0.0.0 --port 8000`. Docker Compose uses PostgreSQL, runs the existing migration entrypoint, and includes a backend healthcheck. Verify `/health` for liveness/database status and `/ready` for request-serving readiness. Build the frontend from `frontend` with `npm run build` and provide `VITE_API_URL` at build time.
+
 ## Phase 0 baseline
 
 The repository baseline is a modular monolith with centralized environment configuration, explicit SQLAlchemy session lifetimes, migration-managed PostgreSQL schema, authenticated tenant-scoped queries, safe API error handling, request correlation, and typed frontend API configuration. Production settings reject debug mode and development-only signing keys. `X-Request-ID` and `Server-Timing` are exposed to browser clients for operational diagnosis without exposing secrets.

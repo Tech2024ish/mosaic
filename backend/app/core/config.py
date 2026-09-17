@@ -73,6 +73,15 @@ class Settings(BaseSettings):
                 raise ValueError("debug must be disabled in production")
             if len(self.secret_key) < 32 or self.secret_key.startswith("development-only"):
                 raise ValueError("a strong production secret_key is required")
+            if self.db_password == "mosaic" or self.db_password.strip() == "":
+                raise ValueError("a production database password is required")
+            if self.database_url is not None and self.database_url.startswith("sqlite"):
+                raise ValueError("SQLite is not supported in production")
+            if not self.backend_cors_origins or any(
+                origin == "*" or "localhost" in origin or "127.0.0.1" in origin
+                for origin in self.backend_cors_origins
+            ):
+                raise ValueError("production CORS origins must be explicit deployed origins")
         if self.database_url is None:
             encoded_password = quote_plus(self.db_password)
             self.database_url = (

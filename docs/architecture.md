@@ -118,3 +118,7 @@ Product and warehouse performance builds on `analytics_service` rather than crea
 ## Phase 16 business insights
 
 Business insights are a deterministic composition layer above the existing analytics and inventory services. The authenticated `/api/v1/insights/overview` endpoint returns the selected-period summary, leading product and warehouse rankings, current inventory status, and explainable observations. `/api/v1/insights/comparison` compares equal-length current and immediately preceding periods, using Decimal arithmetic and a null percentage when the previous value is zero. All data access remains organization-scoped through the authenticated user; no insight records are persisted and no migration was required.
+
+## Phase 17 deployment foundation
+
+Production deployment remains a single FastAPI application and PostgreSQL database. Configuration is environment-driven; production rejects development secrets, debug mode, SQLite, default database credentials, and wildcard/local CORS origins. The container entrypoint applies the existing Alembic head before starting Uvicorn, while the image contains runtime dependencies only. Compose exposes a backend healthcheck, and `/health` and `/ready` remain safe liveness/readiness endpoints. Frontend API configuration is supplied through `VITE_API_URL` at build time and contains no secrets.
