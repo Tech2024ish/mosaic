@@ -119,3 +119,12 @@ Performance rankings are available from the existing analytics API:
 - `/api/v1/analytics/warehouses/performance?limit=10&sort=revenue&order=desc`
 
 Both endpoints support the existing date range and business-code filters. Supported sort fields are `revenue`, `quantity`, and `transactions`; limits are bounded to 100. Results are aggregated in PostgreSQL and scoped to the authenticated organization. The frontend exposes the same controls in the Product & Warehouse Performance workspace. No migration was required.
+
+## Phase 16 business insights
+
+The authenticated Business Insights view is backed by:
+
+- `GET /api/v1/insights/overview?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&limit=5`
+- `GET /api/v1/insights/comparison?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
+
+Overview observations combine existing sales rankings and current inventory data. Comparison uses the immediately preceding period with the same number of days and reports current value, previous value, absolute change, and percentage change where the previous value is non-zero. Results are tenant-scoped, deterministic, and descriptive; forecasting and recommendations are deferred.

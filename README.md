@@ -208,3 +208,7 @@ Current position means the latest snapshot for each organization/product/warehou
 ## Phase 15 product and warehouse performance
 
 The authenticated workspace provides a Product & Warehouse Performance view. It reuses the existing tenant-scoped analytics endpoints to rank products and warehouses by revenue, units sold, or transaction count, with bounded results, safe ordering, optional date ranges, and exact business-code filters. Aggregation remains in PostgreSQL; no second analytics store or migration was introduced. The view is descriptive only, with forecasting, recommendations, and optimization deferred.
+
+## Phase 16 business insights
+
+Authenticated users can access `GET /api/v1/insights/overview` for deterministic sales, product, warehouse, and current-inventory observations. `GET /api/v1/insights/comparison` compares a required current date range with the immediately preceding range of equal length. Insights use explicit categories such as positive, negative, informational, and attention; no forecasts, AI explanations, or recommendations are generated. Both endpoints validate dates, reuse tenant-scoped services, and return empty results safely.

@@ -114,3 +114,7 @@ The API uses bounded offset/limit pagination and explicit search, status, and so
 ## Phase 15 product and warehouse performance
 
 Product and warehouse performance builds on `analytics_service` rather than creating parallel business-data queries. `GET /api/v1/analytics/products/top` and `GET /api/v1/analytics/warehouses/performance` accept bounded `limit`, optional date filters, exact business-code filters, and whitelisted `sort=revenue|quantity|transactions` with `order=asc|desc`. Every aggregate applies the authenticated organization predicate before grouping and ordering. The frontend performance view reuses these APIs for ranked tables and applies the existing tenant/session boundary. No schema change was required.
+
+## Phase 16 business insights
+
+Business insights are a deterministic composition layer above the existing analytics and inventory services. The authenticated `/api/v1/insights/overview` endpoint returns the selected-period summary, leading product and warehouse rankings, current inventory status, and explainable observations. `/api/v1/insights/comparison` compares equal-length current and immediately preceding periods, using Decimal arithmetic and a null percentage when the previous value is zero. All data access remains organization-scoped through the authenticated user; no insight records are persisted and no migration was required.
