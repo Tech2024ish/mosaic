@@ -26,7 +26,7 @@ def list_sales(
         "unit_price": SalesHistory.unit_price,
     }
     column = sort_columns[sort]
-    statement: Select[tuple[SalesHistory]] = select(SalesHistory).where(
+    statement: Select[SalesHistory] = select(SalesHistory).where(
         SalesHistory.organization_id == organization_id
     )
     if product_code:

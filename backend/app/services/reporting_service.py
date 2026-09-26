@@ -3,7 +3,7 @@ import io
 import uuid
 from collections.abc import Iterator
 from datetime import date
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import Select, and_, func, select
 from sqlalchemy.orm import Session
@@ -157,7 +157,7 @@ def inventory_rows(
             statement = statement.limit(limit)
         return statement
 
-    historical_statement: Select[Any] = (
+    historical_statement = (
         select(
             Product.product_code,
             Product.name,
@@ -207,7 +207,7 @@ def inventory_rows(
         )
     if limit is not None:
         historical_statement = historical_statement.limit(limit)
-    return historical_statement
+    return cast(Select[Any], historical_statement)
 
 
 def report_inventory_summary(
@@ -320,8 +320,10 @@ def stream_csv_report(
         statement = _apply_sales_filters(
             statement, date_from, date_to, product_code, warehouse_code
         )
-        statement = statement.limit(limit)
-        for row in db.execute(statement.execution_options(stream_results=True)).yield_per(1000):
+        limited_statement = statement.limit(limit)
+        for row in db.execute(limited_statement.execution_options(stream_results=True)).yield_per(
+            1000
+        ):
             yield _csv_line(tuple(row))
         return
 
@@ -390,13 +392,13 @@ def stream_csv_report(
         )
 
 
-def _apply_sales_filters(
-    statement: Select[Any],
+def _apply_sales_filters[*SelectTs](
+    statement: Select[*SelectTs],
     date_from: date | None,
     date_to: date | None,
     product_code: str | None,
     warehouse_code: str | None,
-) -> Select[Any]:
+) -> Select[*SelectTs]:
     if date_from is not None:
         statement = statement.where(SalesHistory.sale_date >= date_from)
     if date_to is not None:

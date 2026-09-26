@@ -48,9 +48,7 @@ def list_products(
         "created_at": Product.created_at,
     }
     column = sort_columns[sort]
-    statement: Select[tuple[Product]] = select(Product).where(
-        Product.organization_id == organization_id
-    )
+    statement: Select[Product] = select(Product).where(Product.organization_id == organization_id)
     if search:
         term = f"%{search.strip()}%"
         statement = statement.where(Product.product_code.ilike(term) | Product.name.ilike(term))
@@ -90,7 +88,7 @@ def list_warehouses(
         "created_at": Warehouse.created_at,
     }
     column = sort_columns[sort]
-    statement: Select[tuple[Warehouse]] = select(Warehouse).where(
+    statement: Select[Warehouse] = select(Warehouse).where(
         Warehouse.organization_id == organization_id
     )
     if search:
@@ -140,7 +138,7 @@ def list_suppliers(
         "created_at": Supplier.created_at,
     }
     column = sort_columns[sort]
-    statement: Select[tuple[Supplier]] = select(Supplier).where(
+    statement: Select[Supplier] = select(Supplier).where(
         Supplier.organization_id == organization_id
     )
     if search:
@@ -189,7 +187,7 @@ def list_inventory(
         "quantity": InventorySnapshot.quantity_on_hand,
     }
     column = sort_columns[sort]
-    statement: Select[tuple[InventorySnapshot]] = select(InventorySnapshot).where(
+    statement: Select[InventorySnapshot] = select(InventorySnapshot).where(
         InventorySnapshot.organization_id == organization_id
     )
     if product_id is not None:
