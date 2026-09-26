@@ -19,6 +19,13 @@ def test_health_reports_database_status(monkeypatch: pytest.MonkeyPatch) -> None
     assert response.json() == {"status": "ok", "database": "ok"}
 
 
+def test_security_headers_are_present() -> None:
+    response = TestClient(app).get("/api/v1")
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+
+
 def test_request_id_is_generated_and_propagated() -> None:
     response = TestClient(app).get("/api/v1")
     assert response.status_code == 200

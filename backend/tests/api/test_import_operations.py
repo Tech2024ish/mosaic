@@ -1,4 +1,5 @@
 import uuid
+from io import BytesIO
 from pathlib import Path
 
 from conftest import verify_test_user
@@ -24,6 +25,18 @@ def register_and_login(client: TestClient) -> tuple[dict[str, str], str]:
     verify_test_user(payload["email"])
     token = client.post("/api/v1/auth/login", json=payload).json()["access_token"]
     return payload, token
+
+
+def test_authenticated_import_rejects_non_csv_filename() -> None:
+    client = TestClient(app)
+    _, token = register_and_login(client)
+    response = client.post(
+        "/api/v1/imports",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"file": ("payload.txt", BytesIO(b"not csv"), "text/plain")},
+        data={"dataset_type": "sales_history"},
+    )
+    assert response.status_code == 415
 
 
 def make_job(email: str, status: str) -> uuid.UUID:

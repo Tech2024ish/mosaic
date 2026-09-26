@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_request_id, request_id_middleware
+from app.core.security import security_headers_middleware
 from app.routers import analytics, api, auth, health, imports, insights, master_data, reports, sales
 
 settings = get_settings()
@@ -13,6 +14,7 @@ configure_logging()
 logger = logging.getLogger(__name__)
 app = FastAPI(title=settings.app_name, debug=settings.debug, version="0.1.0")
 app.middleware("http")(request_id_middleware)
+app.middleware("http")(security_headers_middleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.backend_cors_origins,

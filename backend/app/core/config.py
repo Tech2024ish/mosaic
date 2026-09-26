@@ -82,7 +82,7 @@ class Settings(BaseSettings):
                 for origin in self.backend_cors_origins
             ):
                 raise ValueError("production CORS origins must be explicit deployed origins")
-        if self.database_url is None:
+        if self.database_url is None or not self.database_url.strip():
             encoded_password = quote_plus(self.db_password)
             self.database_url = (
                 f"postgresql+psycopg://{self.db_user}:{encoded_password}"

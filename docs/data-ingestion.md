@@ -132,3 +132,7 @@ Overview observations combine existing sales rankings and current inventory data
 ## Production ingestion operations
 
 Production deployments must provide PostgreSQL connection settings, storage location, upload/report limits, and explicit CORS origins through environment variables. The existing Docker entrypoint applies migrations before starting the API; import processing remains in-process and retains its documented restart-durability limitation. Use `/health` and `/ready` before exercising authenticated imports, then verify import history, retry, cancellation, validation reports, and tenant-scoped statistics with a test account.
+
+## Phase 18 upload security
+
+The import endpoint requires authentication before processing an upload, accepts only filenames with the `.csv` extension, enforces the configured byte limit while streaming, generates a random storage key, and removes partial files after failures. Stored-file access resolves the path and requires it to remain directly under the configured storage root. Client filenames are retained only as bounded metadata and are not used as filesystem paths.

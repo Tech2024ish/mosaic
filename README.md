@@ -61,6 +61,10 @@ Set `ENVIRONMENT=production` for deployment. Production configuration rejects de
 
 From `backend`, apply migrations with `py -m alembic upgrade head`, then start the API with `uvicorn app.main:app --host 0.0.0.0 --port 8000`. Docker Compose uses PostgreSQL, runs the existing migration entrypoint, and includes a backend healthcheck. Verify `/health` for liveness/database status and `/ready` for request-serving readiness. Build the frontend from `frontend` with `npm run build` and provide `VITE_API_URL` at build time.
 
+## Phase 18 production security
+
+API responses include baseline security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and `Permissions-Policy`). Authenticated imports reject non-CSV filenames before storage, while stored keys remain generated and path-checked. Password reset tokens are hashed, expiring, one-time, and revoke active sessions when consumed. Production configuration rejects unsafe database, debug, signing-key, and CORS settings. The current application has no role-based permission model or distributed rate limiter; those remain explicit follow-up limitations rather than hidden client-side controls.
+
 ## Phase 0 baseline
 
 The repository baseline is a modular monolith with centralized environment configuration, explicit SQLAlchemy session lifetimes, migration-managed PostgreSQL schema, authenticated tenant-scoped queries, safe API error handling, request correlation, and typed frontend API configuration. Production settings reject debug mode and development-only signing keys. `X-Request-ID` and `Server-Timing` are exposed to browser clients for operational diagnosis without exposing secrets.

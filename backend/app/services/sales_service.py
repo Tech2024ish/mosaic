@@ -1,7 +1,8 @@
 import uuid
 from datetime import date
+from typing import Any
 
-from sqlalchemy import Select, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.sales_history import SalesHistory
@@ -26,9 +27,7 @@ def list_sales(
         "unit_price": SalesHistory.unit_price,
     }
     column = sort_columns[sort]
-    statement: Select[tuple[SalesHistory]] = select(SalesHistory).where(
-        SalesHistory.organization_id == organization_id
-    )
+    statement: Any = select(SalesHistory).where(SalesHistory.organization_id == organization_id)
     if product_code:
         statement = statement.where(SalesHistory.product_code == product_code.strip().upper())
     if warehouse_code:

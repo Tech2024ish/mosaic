@@ -122,3 +122,7 @@ Business insights are a deterministic composition layer above the existing analy
 ## Phase 17 deployment foundation
 
 Production deployment remains a single FastAPI application and PostgreSQL database. Configuration is environment-driven; production rejects development secrets, debug mode, SQLite, default database credentials, and wildcard/local CORS origins. The container entrypoint applies the existing Alembic head before starting Uvicorn, while the image contains runtime dependencies only. Compose exposes a backend healthcheck, and `/health` and `/ready` remain safe liveness/readiness endpoints. Frontend API configuration is supplied through `VITE_API_URL` at build time and contains no secrets.
+
+## Phase 18 production security
+
+Security hardening remains inside the existing boundaries. The application adds safe baseline response headers and rejects non-CSV upload filenames before invoking storage. Authentication continues to validate signed tokens against active users and database sessions; password reset tokens remain hashed, expiring, single-use values that revoke active sessions on successful reset. Tenant predicates remain service/database responsibilities. No RBAC or distributed rate limiter was invented because the current schema and deployment do not provide those capabilities; the limitation is documented for future product work.
