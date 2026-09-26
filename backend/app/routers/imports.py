@@ -2,6 +2,7 @@ import csv
 import io
 import uuid
 from collections.abc import Generator
+from pathlib import PurePath
 
 from fastapi import (
     APIRouter,
@@ -85,6 +86,8 @@ async def upload_import(
 ) -> ImportJob:
     if not file.filename:
         raise HTTPException(status_code=400, detail="A filename is required")
+    if PurePath(file.filename).suffix.lower() != ".csv":
+        raise HTTPException(status_code=415, detail="Only CSV uploads are supported")
     file_storage = storage()
     try:
         storage_key, size, digest = await file_storage.save_upload(file)
