@@ -3,9 +3,9 @@ import io
 import uuid
 from collections.abc import Iterator
 from datetime import date
-from typing import Any, cast
+from typing import Any
 
-from sqlalchemy import Select, and_, func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.models.inventory_snapshot import InventorySnapshot
@@ -114,10 +114,10 @@ def inventory_rows(
     product_code: str | None,
     warehouse_code: str | None,
     limit: int | None,
-) -> Select[Any]:
+) -> Any:
     if date_from is None and date_to is None:
         latest = _latest_inventory_query(organization_id).subquery()
-        statement: Select[Any] = (
+        statement: Any = (
             select(
                 Product.product_code,
                 Product.name,
@@ -207,7 +207,7 @@ def inventory_rows(
         )
     if limit is not None:
         historical_statement = historical_statement.limit(limit)
-    return cast(Select[Any], historical_statement)
+    return historical_statement
 
 
 def report_inventory_summary(
@@ -392,13 +392,13 @@ def stream_csv_report(
         )
 
 
-def _apply_sales_filters[*SelectTs](
-    statement: Select[*SelectTs],
+def _apply_sales_filters(
+    statement: Any,
     date_from: date | None,
     date_to: date | None,
     product_code: str | None,
     warehouse_code: str | None,
-) -> Select[*SelectTs]:
+) -> Any:
     if date_from is not None:
         statement = statement.where(SalesHistory.sale_date >= date_from)
     if date_to is not None:

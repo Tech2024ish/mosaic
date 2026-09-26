@@ -2,7 +2,7 @@ import uuid
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Select, and_, case, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -48,7 +48,7 @@ def list_products(
         "created_at": Product.created_at,
     }
     column = sort_columns[sort]
-    statement: Select[Product] = select(Product).where(Product.organization_id == organization_id)
+    statement: Any = select(Product).where(Product.organization_id == organization_id)
     if search:
         term = f"%{search.strip()}%"
         statement = statement.where(Product.product_code.ilike(term) | Product.name.ilike(term))
@@ -88,9 +88,7 @@ def list_warehouses(
         "created_at": Warehouse.created_at,
     }
     column = sort_columns[sort]
-    statement: Select[Warehouse] = select(Warehouse).where(
-        Warehouse.organization_id == organization_id
-    )
+    statement: Any = select(Warehouse).where(Warehouse.organization_id == organization_id)
     if search:
         term = f"%{search.strip()}%"
         statement = statement.where(
@@ -138,9 +136,7 @@ def list_suppliers(
         "created_at": Supplier.created_at,
     }
     column = sort_columns[sort]
-    statement: Select[Supplier] = select(Supplier).where(
-        Supplier.organization_id == organization_id
-    )
+    statement: Any = select(Supplier).where(Supplier.organization_id == organization_id)
     if search:
         term = f"%{search.strip()}%"
         statement = statement.where(Supplier.supplier_code.ilike(term) | Supplier.name.ilike(term))
@@ -187,7 +183,7 @@ def list_inventory(
         "quantity": InventorySnapshot.quantity_on_hand,
     }
     column = sort_columns[sort]
-    statement: Select[InventorySnapshot] = select(InventorySnapshot).where(
+    statement: Any = select(InventorySnapshot).where(
         InventorySnapshot.organization_id == organization_id
     )
     if product_id is not None:
