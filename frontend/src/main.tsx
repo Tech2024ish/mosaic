@@ -45,6 +45,14 @@ function App() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [resetToken, setResetToken] = useState("");
   const [token, setToken] = useState(() => window.localStorage.getItem("mosaic_access_token") ?? "");
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    const savedTheme = window.localStorage.getItem("mosaic_theme");
+    return savedTheme === "dark" || savedTheme === "light"
+      ? savedTheme
+      : window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+  });
   const [showAccess, setShowAccess] = useState(() => window.location.hash === "#access");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authMessage, setAuthMessage] = useState("");
@@ -160,6 +168,10 @@ function App() {
   useEffect(() => {
     if (token) setShowAccess(true);
   }, [token]);
+
+  useEffect(() => {
+    window.localStorage.setItem("mosaic_theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     if (!token) { setCurrentUser(null); setHistory([]); setStats(null); setMasterItems([]); return; }
@@ -596,9 +608,9 @@ function App() {
     </section>
   );
 
-  return <div className={`${token ? "app-shell workspace-shell" : "app-shell"}${showAccess ? " access-open" : ""}`}>
+  return <div className={`${token ? "app-shell workspace-shell" : "app-shell"}${showAccess ? " access-open" : ""} theme-${theme}`}>
     {token && <aside className="workspace-sidebar" aria-label="Workspace navigation"><a className="sidebar-brand" href="#overview">MOSAIC<span>.</span></a><p className="sidebar-label">Workspace</p><nav className="sidebar-nav"><a className="sidebar-active" href="#overview"><span>⌂</span>Overview</a><a href="#inventory"><span>▧</span>Inventory</a><a href="#ingestion"><span>↥</span>Data intake</a><a href="#operations"><span>▦</span>Operations</a><a href="#analytics"><span>◒</span>Analytics</a><a href="#reports"><span>▤</span>Reports</a></nav><div className="sidebar-footer"><span className="sidebar-avatar">{currentUser?.name?.slice(0, 1).toUpperCase() ?? "M"}</span><div><strong>{currentUser?.name ?? "Workspace"}</strong><small>{currentUser?.email ?? "Tenant workspace"}</small></div><button className="sidebar-signout" type="button" onClick={signOut} aria-label="Sign out">↗</button></div></aside>}
-    <header className="topbar"><a className="brand" href="/">MOSAIC<span>.</span></a><nav>{token ? <><a className="active" href="#overview">Overview</a><a href="#ingestion">Data intake</a><a href="#operations">Operations</a><a href="#analytics">Analytics</a><a href="#reports">Reports</a></> : <><a className="active" href="#overview">Product</a><a href="#network">Solutions</a><a href="#network">Analytics</a><a href="#network">Pricing</a></>}</nav><div className="topbar-actions"><span className="connection"><i /> {apiStatus}</span>{token ? <><span className="user-label">{currentUser?.name ?? "Workspace"}</span><button className="button button-ghost" onClick={signOut}>Sign out</button></> : <a className="button button-gold" href="#access">Get started</a>}</div></header>
+    <header className="topbar"><a className="brand" href="/">MOSAIC<span>.</span></a><nav>{token ? <><a className="active" href="#overview">Overview</a><a href="#ingestion">Data intake</a><a href="#operations">Operations</a><a href="#analytics">Analytics</a><a href="#reports">Reports</a></> : <><a className="active" href="#overview">Product</a><a href="#network">Solutions</a><a href="#network">Analytics</a><a href="#network">Pricing</a></>}</nav><div className="topbar-actions"><span className="connection"><i /> {apiStatus}</span><button className="theme-toggle" type="button" aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} aria-pressed={theme === "dark"} onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}>{theme === "dark" ? "☼ Light" : "☾ Dark"}</button>{token ? <><span className="user-label">{currentUser?.name ?? "Workspace"}</span><button className="button button-ghost" onClick={signOut}>Sign out</button></> : <a className="button button-gold" href="#access">Get started</a>}</div></header>
     <main>
       {decisionDashboard}
       {inventoryDashboard}
