@@ -716,3 +716,121 @@ nav { display: flex; gap: 30px; margin-right: auto; color: #61716b; font-size: .
   .workspace-shell .chart-value { display: none; }
   .workspace-shell .chart-column small { max-width: 52px; font-size: .5rem; }
 }
+
+/* Analytics page: make filters, summary, and ranked results read as one workflow. */
+.workspace-shell .performance-dashboard {
+  padding-top: 30px;
+}
+.workspace-shell .performance-dashboard .dashboard-heading {
+  align-items: flex-end;
+  margin-bottom: 18px;
+}
+.workspace-shell .performance-dashboard .dashboard-heading h1 {
+  font-size: clamp(1.8rem, 3vw, 2.35rem);
+  line-height: 1;
+}
+.workspace-shell .performance-dashboard .dashboard-subtitle {
+  max-width: 600px;
+  margin-top: 9px;
+  line-height: 1.55;
+}
+.workspace-shell .performance-dashboard .dashboard-heading .button {
+  min-height: 38px;
+}
+.workspace-shell .performance-filters {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) repeat(4, minmax(100px, .8fr)) auto;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 13px 14px;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  background: var(--ui-surface-muted);
+}
+.workspace-shell .performance-filters label {
+  color: var(--ui-text-muted);
+  font-size: .61rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.workspace-shell .performance-filters input,
+.workspace-shell .performance-filters select {
+  min-height: 38px;
+  margin-top: 7px;
+  padding: 8px 9px;
+  font-size: .7rem;
+}
+.workspace-shell .performance-apply {
+  min-height: 38px;
+  height: auto;
+}
+.performance-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.performance-summary > div {
+  display: grid;
+  gap: 7px;
+  padding: 13px 15px;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  background: var(--ui-surface);
+}
+.performance-summary span {
+  color: var(--ui-text-muted);
+  font-size: .61rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.performance-summary strong {
+  color: var(--ui-text);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.25rem;
+  font-weight: 400;
+}
+.workspace-shell .performance-grid {
+  gap: 12px;
+}
+.workspace-shell .performance-grid .dashboard-panel {
+  padding: 17px;
+}
+.workspace-shell .performance-table-head {
+  min-height: 20px;
+  padding-bottom: 9px;
+}
+.workspace-shell .performance-table-row {
+  min-height: 58px;
+}
+.workspace-shell .performance-table-row b {
+  color: var(--ui-text);
+}
+
+@media (max-width: 1000px) {
+  .workspace-shell .performance-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .workspace-shell .performance-apply { width: 100%; }
+}
+
+@media (max-width: 560px) {
+  .workspace-shell .performance-dashboard { padding-top: 22px; }
+  .workspace-shell .performance-dashboard .dashboard-heading {
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .workspace-shell .performance-dashboard .dashboard-heading h1 { font-size: 1.8rem; }
+  .workspace-shell .performance-dashboard .dashboard-heading .dashboard-subtitle { font-size: .7rem; }
+  .workspace-shell .performance-dashboard .dashboard-heading .button { width: 100%; }
+  .workspace-shell .performance-filters {
+    grid-template-columns: 1fr;
+    gap: 9px;
+    padding: 12px;
+  }
+  .performance-summary { grid-template-columns: 1fr; gap: 8px; }
+  .performance-summary > div { min-height: 70px; }
+  .workspace-shell .performance-grid .dashboard-panel { padding: 14px; }
+}
